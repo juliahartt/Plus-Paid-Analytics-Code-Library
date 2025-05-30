@@ -12,3 +12,8 @@ The team will default to using the modelled tables (example: #1 and #2 above) an
 2. `shopify-dw.raw_salesforce_banff.opportunity`
 3. `shopify-dw.raw_salesforce_banff.account`
 4. `shopify-dw.raw_salesforce_banff.contact`
+
+To ensure alignment between Majority of Paid Media Analytics Team's queries should be limited to the following Primary Products of Interest:
+1. Plus
+2. Commerce Components (CCS)
+3. B2B
