@@ -13,6 +13,10 @@ The team will default to using the modelled tables (example: #1 and #2 above) an
 3. `shopify-dw.raw_salesforce_banff.account`
 4. `shopify-dw.raw_salesforce_banff.contact`
 
+DLV data is distributed across a few productionalized DLV tables, descriptions below:
+1. `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback` <- Aggregates created leads by day against spend. This table powers the DLV Dashboard.
+2. `shopify-dw.mart_commercial_optimization.dollar_lead_value_attribution` <- At the leadID and touchpointID level. To be used for attribution only.
+
 To ensure alignment between Majority of Paid Media Analytics Team's queries should be limited to the following Primary Products of Interest:
 1. Plus
 2. Commerce Components (CCS)
