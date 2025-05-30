@@ -1,0 +1,346 @@
+################ ######## ######## ######## ########  Version 2 ###################### ######## ######## ######## ######## ######## ######## ######## 
+#Updated by: Kumud
+#Changes made: 5/5/2025
+#Added routing segment from base__monorail_horton_salesforce_record_1 based on 1st event
+#Added PPI in ('Plus','Commerce Components','B2B'), earlier it was Plus only
+#removed bizible columns and pulled marketing_channel ,marketing_subchannel and campaign name from  sales.sales_lead_attribution ,last event
+################ ######## ######## ######## ########  ######### ###################### ######## ######## ######## ######## ######## ######## ######## 
+
+WITH
+performance_stats AS (
+  SELECT
+    date,
+    COALESCE(TRIM(IF(ARRAY_LENGTH(SPLIT(l.campaign_name,'|')) = 14, SPLIT(l.campaign_name,'|'), null)[SAFE_OFFSET(5)]),"Unknown Region") AS region,
+    CASE
+        WHEN REGEXP_CONTAINS(l.country_name,"Sweden|Norway|Denmark|United Kingdom|Finland|Iceland|Ireland|Greenland|Netherlands|Belgium|Luxembourg") THEN "Northern Europe"
+        WHEN REGEXP_CONTAINS(l.country_name,"Germany|Austria|Switzerland") THEN "DACH"
+        WHEN REGEXP_CONTAINS(l.country_name,"France") THEN "Southern Europe: France"
+        WHEN REGEXP_CONTAINS(l.country_name,"Italy") THEN "Southern Europe: Italy"
+        WHEN REGEXP_CONTAINS(l.country_name,"Spain") THEN "Southern Europe: Spain"
+        WHEN REGEXP_CONTAINS(l.country_name,"Australia|New Zealand") THEN "ANZ"
+        WHEN REGEXP_CONTAINS(l.country_name,"Malaysia|Philippines|Singapore|Thailand|Indonesia") THEN "SEA"
+        WHEN REGEXP_CONTAINS(l.country_name,"China|Hong Kong|Taiwan") THEN "SEA"
+        WHEN l.country_name="India" THEN "India"
+        WHEN l.country_name="Japan" THEN "Japan"
+        WHEN REGEXP_CONTAINS(l.country_name,"AMER") THEN l.country_name
+      ELSE
+        CONCAT("Other-", TRIM(SPLIT(l.country_name, '-')[OFFSET(0)]))
+    END
+      AS subregion,
+    "N/A" as routing_segment,  
+    lower(marketing_channel) as channel,
+    marketing_type,
+    marketing_channel,
+    marketing_subchannel,
+    commercial_channel as commercial_channel,
+    "N/A" as marketing_channel_path, --       'Paid Search.Bing' as marketing_channel_path,
+    "N/A" as newleadsource,
+      CASE 
+       WHEN LOWER(campaign_name) LIKE '%awareness%' THEN 'Awareness' 
+       WHEN lower(campaign_name) LIKE '%aw%' THEN 'Awareness'
+       WHEN lower(campaign_name) LIKE '%acq%' THEN 'Acquisition'
+       WHEN LOWER(campaign_name) LIKE '%lead%gen%' THEN 'Acquisition'
+       WHEN lower(campaign_name) LIKE '%cn%' THEN 'Consideration' 
+       WHEN LOWER(campaign_name) LIKE '%consideration%' THEN 'Consideration'
+      ELSE 'Unknown Funnel Type' END AS Funnel,
+    campaign_name as ad_campaign_name,
+    marketing_subchannel as touchpoint_source,
+    "N/A" as metric,
+    "N/A" as market_segment,
+    "N/A" as upgrade_type,
+    "N/A" as dataset,
+    0 as net_new_mqls,
+    0 as net_new_leads,
+    0 as targets,
+    SUM(cost_usd) as Cost,
+    0 as impressions
+  FROM `shopify-dw.marketing.marketing_spend` l 
+  WHERE cost_center_sub_group = 'Plus'
+  GROUP BY ALL
+
+  union all
+
+  SELECT
+    date,
+    region,
+    subregion,
+    "N/A" as routing_segment,  
+    channel,
+    'N/A' as marketing_type,
+    'N/A' as marketing_channel,
+    'N/A' as marketing_subchannel,
+    'N/A' as commercial_channel,
+    marketing_channel_path,
+    newleadsource,
+    funnel,
+    ad_campaign_name,
+    touchpoint_source,
+    metric,
+    market_segment,
+    upgrade_type,
+    dataset,
+    net_new_mqls,
+    net_new_leads,
+    targets,
+    0 as Cost,
+    0 as impressions
+  FROM `performance-marketing-249816.Pluss_Funel_PerformanceCost.funneldeepdive_crosspl` --gives targets 
+),
+lead_first_submission AS(
+  SELECT
+    subs.lead_id,
+    subs.lead_submission_id,
+    subs.lead_submission_at,
+    subs.lead_source,
+    subs.primary_product_interest,
+    subs.region,
+    subs.routing_segment,
+    subs.is_shopify_customer,
+    subs.lead_id_submission_index
+  FROM shopify-dw.sales.sales_lead_submissions AS subs
+  WHERE subs.lead_id_submission_index = 1
+),
+-- Region logic is updated: the plus_funnel_new used the region from base__salesforce_banff_leads which didn't match the region in
+-- sales_leads. This version will take the region from the modelled sales_leads.
+base_plus_leads as(
+  select
+    l.new_sales_ready_at,
+    l.created_at,
+    lfs.routing_segment,   ---- from 1st submission
+    CASE
+        WHEN REGEXP_CONTAINS(l.region,"AMER") THEN "AMER"
+        WHEN REGEXP_CONTAINS(l.region,"APAC") THEN "APAC"
+        WHEN REGEXP_CONTAINS(l.region,"EMEA") THEN "EMEA"
+        WHEN REGEXP_CONTAINS(l.region,"LATAM|Unknown") THEN "LATAM+(Unknown)"
+      ELSE
+      "null"
+    END
+      AS region,
+      CASE
+        WHEN REGEXP_CONTAINS(l.country,"Sweden|Norway|Denmark|United Kingdom|Finland|Iceland|Ireland|Greenland|Netherlands|Belgium|Luxembourg") THEN "Northern Europe"
+        WHEN REGEXP_CONTAINS(l.country,"Germany|Austria|Switzerland") THEN "DACH"
+        WHEN REGEXP_CONTAINS(l.country,"France") THEN "Southern Europe: France"
+        WHEN REGEXP_CONTAINS(l.country,"Italy") THEN "Southern Europe: Italy"
+        WHEN REGEXP_CONTAINS(l.country,"Spain") THEN "Southern Europe: Spain"
+        WHEN REGEXP_CONTAINS(l.country,"Australia|New Zealand") THEN "ANZ"
+        WHEN REGEXP_CONTAINS(l.country,"Malaysia|Philippines|Singapore|Thailand|Indonesia") THEN "SEA"
+        WHEN REGEXP_CONTAINS(l.country,"China|Hong Kong|Taiwan") THEN "SEA"
+        WHEN l.country="India" THEN "India"
+        WHEN l.country="Japan" THEN "Japan"
+        WHEN REGEXP_CONTAINS(l.region,"AMER") THEN l.region
+      ELSE
+        CONCAT("Other-", TRIM(SPLIT(l.region, '-')[OFFSET(0)]))
+    END
+      AS subregion,
+    l.country,
+    CASE
+        WHEN REGEXP_CONTAINS(l.lead_source_original,"Contact Us|Core Upgrade|Drift|Guru") THEN "Acquisition"
+      ELSE
+      "Consideration"
+    END
+      AS funnel,
+    CASE
+        WHEN NOT REGEXP_CONTAINS(l.lead_source_original,"Contact Us|Core Upgrade|Drift|Guru|Content|Event|Plus Blog") THEN "Other"
+      ELSE
+      l.lead_source_original
+    END
+      AS newleadsource,
+      l.lead_source_original AS SOURCE,
+    CASE
+        WHEN lfs.is_shopify_customer IS TRUE THEN "Upgrade" --from 1st submission
+      ELSE
+      "New Business"
+    END
+      AS market_segment,
+      "N/A" AS upgrade_type,
+      "N/A" AS dataset,
+      l.lead_id,
+      if(l.created_at iS NOT NULL,1,0) AS num_leads,
+      if(l.new_sales_ready_at iS NOT NULL,1,0) AS num_qualified_leads
+  FROM  `shopify-dw.sales.sales_leads` l left join lead_first_submission lfs on l.lead_id=lfs.lead_id
+ LEFT JOIN `shopify-dw.raw_salesforce_banff.lead` rl 
+      ON l.lead_id = rl.Id AND NOT rl.IsDeleted
+  where lfs.primary_product_interest in ('Plus','Commerce Components','B2B') --from 1st submission
+  
+  and l.created_at >= TIMESTAMP '2024-01-01'
+)
+
+, combine_touchpoints AS (
+SELECT
+*
+FROM base_plus_leads bpl
+LEFT JOIN shopify-dw.sales.sales_lead_attribution_v1 slt 
+    ON bpl.lead_id = slt.lead_id
+where slt.is_valid_for_lead_created  
+QUALIFY ROW_NUMBER() OVER(PARTITION BY bpl.lead_id ORDER BY slt.touchpoint_timestamp desc) = 1 --take the last-touch touchpoint before lead creation
+)
+
+, summarize AS (
+  SELECT
+  date_trunc(DATE(created_at), DAY) AS date,
+  region,
+  subregion,
+  routing_segment,
+  CASE
+    WHEN marketing_channel IS NOT NULL and marketing_channel != 'unknown' THEN lower(marketing_channel)
+    --WHEN marketing_channel IS NULL OR marketing_channel = 'unknown' THEN lower(bizible_marketing_channel_last_touch)
+    ELSE
+    "Other"
+  END AS channel,
+  marketing_type,
+  marketing_channel,
+  marketing_subchannel,
+  commercial_channel,
+  CASE
+    WHEN marketing_channel IS NOT NULL and marketing_channel != 'unknown' THEN lower(CONCAT(marketing_channel,".",marketing_subchannel))
+    --WHEN marketing_channel IS NULL OR marketing_channel = 'unknown' THEN lower(CONCAT(bizible_marketing_channel_last_touch,".",bizible_touchpoint_source_last_touch))
+  ELSE
+  "Other"
+END
+  AS marketing_channel_path,
+  newleadsource,
+  funnel,
+  campaign_name as ad_campaign_name,
+  TRIM(LOWER(marketing_subchannel)) AS touchpoint_source,
+  'N/A' AS metric,
+  market_segment,
+  upgrade_type,
+  dataset,
+  SUM(0) as net_new_mqls,
+  SUM(num_leads) as net_new_leads,
+  SUM(0) as targets,
+  SUM(0) as cost,
+  SUM(0) as impressions
+FROM combine_touchpoints
+GROUP BY ALL
+
+UNION ALL
+
+SELECT
+  date_trunc(DATE(new_sales_ready_at), DAY) AS date,
+  region,
+  subregion,
+  routing_segment,
+  CASE
+    WHEN marketing_channel IS NOT NULL THEN lower(marketing_channel)
+    --WHEN marketing_channel IS NULL THEN lower(bizible_marketing_channel_last_touch)
+    ELSE
+    "Other"
+  END AS channel,
+  marketing_type,
+  marketing_channel,
+  marketing_subchannel,
+  commercial_channel,
+  CASE
+    WHEN marketing_channel IS NOT NULL THEN lower(CONCAT(marketing_channel,".",marketing_subchannel))
+    --WHEN marketing_channel IS NULL THEN lower(CONCAT(bizible_marketing_channel_last_touch,".",bizible_touchpoint_source_last_touch))
+  ELSE
+  "Other"
+END
+  AS marketing_channel_path,
+  newleadsource,
+  funnel,
+  campaign_name as ad_campaign_name,
+  marketing_subchannel AS touchpoint_source,
+  'N/A' AS metric,
+  market_segment,
+  upgrade_type,
+  dataset,
+  SUM(num_qualified_leads) as net_new_mqls,
+  SUM(0) as net_new_leads,
+  SUM(0) as targets,
+  SUM(0) as cost,
+  SUM(0) as impressions
+FROM combine_touchpoints
+GROUP BY ALL
+
+UNION ALL
+
+SELECT *
+FROM performance_stats
+)
+
+  SELECT
+  date_trunc(date,WEEK(Monday)) AS week_start_monday,
+  date(date_trunc(date,MONTH)) as month,
+  CASE 
+      WHEN TRIM(LOWER(touchpoint_source)) = 'linkedin' AND lower(ad_campaign_name) LIKE '%amer%' THEN 'AMER'
+      WHEN TRIM(LOWER(touchpoint_source)) = 'linkedin' AND lower(ad_campaign_name) LIKE '%emea%' THEN 'EMEA'
+      WHEN TRIM(LOWER(touchpoint_source)) = 'linkedin' AND lower(ad_campaign_name) LIKE '%apac%' THEN 'APAC'
+  ELSE region END AS region,
+  subregion,
+  routing_segment,  
+  CASE
+    WHEN LOWER(channel) IN ('paid search', 'sem') THEN 'Paid Search'
+    WHEN (marketing_type = 'paid' AND LOWER(channel) = 'social') OR
+            LOWER(channel) = 'paid social' OR
+            regexp_contains(LOWER(channel), r'lead[ _-]?gen[ _-]?form'
+           )  THEN 'Paid Social'
+    WHEN region = 'APAC' AND LOWER(marketing_channel_path) in ('other.paid') THEN 'Paid Social'
+    WHEN LOWER(channel) = 'display' THEN 'Paid Display'
+    ELSE 'All Other Channels'
+  END AS channel,
+
+  CASE
+    WHEN commercial_channel LIKE '%nonbranded%' OR
+        (LOWER(channel) IN ('paid search','sem') AND
+            (LOWER(ad_campaign_name) like '%generic%' OR
+             LOWER(ad_campaign_name) LIKE '%competitor%')
+        )THEN 'Non-brand'
+    WHEN commercial_channel LIKE '%branded%' OR
+         (LOWER(channel) IN ('paid search','sem') AND
+          LOWER(ad_campaign_name) LIKE '%brand%'
+         ) THEN 'Brand'
+    ELSE 'Other'
+  END AS brand_category,
+
+  CASE
+    WHEN (regexp_contains(LOWER(channel), r'lead[ _-]?gen[ _-]?form') OR
+          LOWER(channel)  IN ('paid search', 'display', 'sem', 'paid social') OR
+          (marketing_type = 'paid' AND LOWER(channel) = 'social')
+        )
+        AND LOWER(ad_campaign_name) LIKE '%bau%'
+        THEN 'BAU'
+
+    WHEN (regexp_contains(LOWER(channel), r'lead[ _-]?gen[ _-]?form') OR
+          LOWER(channel)  IN ('paid search', 'display', 'sem', 'paid social') OR
+          (marketing_type = 'paid' AND LOWER(channel) = 'social')
+          )
+          AND LOWER(ad_campaign_name) LIKE '%non%'
+          THEN 'NONBAU'
+    ELSE 'Other'
+  END AS campaign_type,
+    IF(funnel = 'Unknown Funnel Type', 
+    CASE
+       WHEN LOWER(ad_campaign_name) LIKE '%awareness%' THEN 'Awareness' 
+       WHEN lower(ad_campaign_name) LIKE '%aw%' THEN 'Awareness'
+       WHEN lower(ad_campaign_name) LIKE '%acq%' THEN 'Acquisition'
+       WHEN LOWER(ad_campaign_name) LIKE '%lead%gen%' THEN 'Acquisition'
+       WHEN lower(ad_campaign_name) LIKE '%cn%' THEN 'Consideration' 
+       WHEN LOWER(ad_campaign_name) LIKE '%consideration%' THEN 'Consideration'
+      ELSE 'Unknown Funnel Type' END, 
+      funnel) AS Funnel,
+  metric,
+  market_segment,
+  upgrade_type,
+  SUM(net_new_mqls) AS net_new_mqls,
+  SUM(0) as leads,
+  SUM(net_new_leads) AS net_new_leads,
+  SUM(0) as created,
+  SUM(0) as netnewcreated,
+  SUM(0) as NetNewLeads_NotQualified,
+  SUM(0) as won,
+  SUM(targets) as targets,
+  SUM(cost) as cost,
+  SUM(impressions) as impressions,
+    CASE 
+    WHEN LOWER(touchpoint_source) in ('facebook', 'meta') THEN 'meta'
+    WHEN LOWER(touchpoint_source) in ('linkedin') THEN 'linkedin'
+  ELSE touchpoint_source end as touchpoint_source
+FROM summarize
+WHERE TRUE
+    AND DATE >= '2023-01-01' 
+    AND DATE < date_trunc(current_date,WEEK(Monday))
+    
+GROUP BY ALL
+ORDER BY 1 DESC
