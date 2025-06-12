@@ -1,0 +1,9 @@
+select 
+  campaign_targeting_type,
+  sum(spend_usd) as total_spend,
+  sum(leads_attributed) as created_leads,
+  sum(adjusted_dollar_lead_value_usd) as adj_dlv
+from `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback`
+where date >= '2025-01-01'
+and spend_cost_center_sub_group = 'Plus'
+group by campaign_targeting_type
