@@ -1,5 +1,5 @@
 -- =========================================================================
--- MODULAR CHANNEL CLASSIFICATION LOGIC
+-- MODULAR PAID CLASSIFICATION LOGIC
 -- =========================================================================
 -- This module can be inserted into other queries to classify leads as 
 -- paid vs non-paid based on Shopify's IB Leads logic
