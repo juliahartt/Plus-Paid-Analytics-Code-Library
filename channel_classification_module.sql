@@ -1,0 +1,97 @@
+-- =========================================================================
+-- MODULAR CHANNEL CLASSIFICATION LOGIC
+-- =========================================================================
+-- This module can be inserted into other queries to classify leads as 
+-- paid vs non-paid based on Shopify's IB Leads logic
+-- 
+-- REQUIRED FIELDS in your base table/CTE:
+-- - lead_source_original
+-- - lead_source_original_category  
+-- - commercial_channel
+-- - marketing_subchannel
+-- - UTM_Source__c (from raw Salesforce Banff lead table)
+--
+-- USAGE: Replace {YOUR_BASE_TABLE} with your actual table/CTE name
+-- =========================================================================
+
+-- Step 1: Channel Classification
+CASE
+    WHEN lead_source_original = 'Content Syndication' THEN 'content syndication'
+    WHEN lead_source_original = 'Content' AND (
+        LOWER(UTM_Source__c) LIKE '%madisonlogic%'
+        OR LOWER(UTM_Source__c) LIKE '%techtarget%'
+        OR LOWER(UTM_Source__c) LIKE '%integrate%'
+    ) THEN 'content syndication'
+    WHEN lead_source_original_category = "Marketing" 
+        AND LOWER(commercial_channel) LIKE '%paid%' 
+        AND marketing_subchannel = 'content syndication' THEN 'content syndication'
+    WHEN lead_source_original_category = "Marketing" 
+        AND LOWER(commercial_channel) LIKE '%paid%' 
+        AND marketing_subchannel <> 'content syndication' THEN 'paid'
+    WHEN lead_source_original_category = "Marketing" 
+        AND LOWER(commercial_channel) NOT LIKE '%paid%' THEN 'non-paid'
+    ELSE 'null' 
+END AS channel,
+
+-- Step 2: Channel Category (Paid vs Non-Paid)
+CASE 
+    WHEN (
+        CASE
+            WHEN lead_source_original = 'Content Syndication' THEN 'content syndication'
+            WHEN lead_source_original = 'Content' AND (
+                LOWER(UTM_Source__c) LIKE '%madisonlogic%'
+                OR LOWER(UTM_Source__c) LIKE '%techtarget%'
+                OR LOWER(UTM_Source__c) LIKE '%integrate%'
+            ) THEN 'content syndication'
+            WHEN lead_source_original_category = "Marketing" 
+                AND LOWER(commercial_channel) LIKE '%paid%' 
+                AND marketing_subchannel = 'content syndication' THEN 'content syndication'
+            WHEN lead_source_original_category = "Marketing" 
+                AND LOWER(commercial_channel) LIKE '%paid%' 
+                AND marketing_subchannel <> 'content syndication' THEN 'paid'
+            WHEN lead_source_original_category = "Marketing" 
+                AND LOWER(commercial_channel) NOT LIKE '%paid%' THEN 'non-paid'
+            ELSE 'null' 
+        END
+    ) = 'non-paid' THEN 'non-paid'
+    ELSE 'paid' 
+END AS channel_category
+
+-- =========================================================================
+-- FILTER CONDITION (add to WHERE clause)
+-- =========================================================================
+-- This ensures only leads with valid channel classifications are included
+AND CASE
+    WHEN lead_source_original = 'Content Syndication' THEN 'content syndication'
+    WHEN lead_source_original = 'Content' AND (
+        LOWER(UTM_Source__c) LIKE '%madisonlogic%'
+        OR LOWER(UTM_Source__c) LIKE '%techtarget%'
+        OR LOWER(UTM_Source__c) LIKE '%integrate%'
+    ) THEN 'content syndication'
+    WHEN lead_source_original_category = "Marketing" 
+        AND LOWER(commercial_channel) LIKE '%paid%' 
+        AND marketing_subchannel = 'content syndication' THEN 'content syndication'
+    WHEN lead_source_original_category = "Marketing" 
+        AND LOWER(commercial_channel) LIKE '%paid%' 
+        AND marketing_subchannel <> 'content syndication' THEN 'paid'
+    WHEN lead_source_original_category = "Marketing" 
+        AND LOWER(commercial_channel) NOT LIKE '%paid%' THEN 'non-paid'
+    ELSE NULL 
+END IS NOT NULL
+
+-- =========================================================================
+-- SIMPLIFIED VERSION (if you only need channel_category)
+-- =========================================================================
+CASE 
+    WHEN lead_source_original_category = "Marketing" 
+        AND LOWER(commercial_channel) NOT LIKE '%paid%' THEN 'non-paid'
+    WHEN lead_source_original_category = "Marketing" 
+        AND LOWER(commercial_channel) LIKE '%paid%' THEN 'paid'
+    WHEN lead_source_original = 'Content Syndication' THEN 'paid'
+    WHEN lead_source_original = 'Content' AND (
+        LOWER(UTM_Source__c) LIKE '%madisonlogic%'
+        OR LOWER(UTM_Source__c) LIKE '%techtarget%'
+        OR LOWER(UTM_Source__c) LIKE '%integrate%'
+    ) THEN 'paid'
+    ELSE 'paid' 
+END AS channel_category_simplified 
