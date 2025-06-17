@@ -1,0 +1,60 @@
+---MQL
+select
+a.*,
+case 
+  when channel = 'non-paid' then 'non-paid'
+  else 'paid' end as channel_category
+
+from (
+  select
+    segment,
+    channel,
+    date(quarter) as quarter,
+    region,
+    sum(mql) as mql
+  from (
+    select 
+      lv.lead_id,
+      lv.segment,
+      CASE
+        WHEN lead_source_original= 'Content Syndication' THEN 'content syndication'
+        WHEN lead_source_original='Content' AND (LOWER(UTM_Source__c) LIKE '%madisonlogic%'
+        OR LOWER(UTM_Source__c) LIKE '%techtarget%'
+        OR LOWER(UTM_Source__c) LIKE '%integrate%') THEN 'content syndication'
+        WHEN lead_source_original_category="Marketing" and LOWER(commercial_channel) like '%paid%' and marketing_subchannel= 'content syndication' THEN 'content syndication'
+        when lead_source_original_category="Marketing" and LOWER(commercial_channel) like '%paid%' and marketing_subchannel <> 'content syndication' then 'paid'
+        when lead_source_original_category="Marketing" and LOWER(commercial_channel) not like '%paid%' then 'non-paid'
+        ELSE 'null' END AS channel,
+      DATE(l.created_at) AS lead_create_date,
+      date_trunc(l.new_sales_ready_at, quarter) as quarter,
+--date_trunc(lv.created_at, quarter) as quarter,
+      1 as lead,
+      CASE WHEN DATE(l.new_sales_ready_at) IS NOT NULL THEN 1 ELSE 0 END AS MQL,
+      last_touch_adjusted_dlv_usd,
+      lv.region
+
+from `shopify-dw.mart_commercial_optimization.dollar_lead_value_attribution` lv
+
+join `shopify-dw.sales.sales_leads` l
+on lv.lead_id = l.lead_id
+
+join `shopify-dw.raw_salesforce_banff.lead` bl
+on lv.lead_id = bl.id
+
+where lv.is_last_touchpoint IS TRUE
+--and l.lead_source_original_category="Marketing"
+  and lv.product in ('Plus', 'Commerce Components')
+  AND DATE(l.new_sales_ready_at) >= '2024-01-01'
+  and DATE(l.new_sales_ready_at) <= '2025-06-30'
+  and CASE
+    WHEN lead_source_original= 'Content Syndication' THEN 'content syndication'
+    WHEN lead_source_original='Content' AND (LOWER(UTM_Source__c) LIKE '%madisonlogic%'
+    OR LOWER(UTM_Source__c) LIKE '%techtarget%'
+    OR LOWER(UTM_Source__c) LIKE '%integrate%') THEN 'content syndication'
+    WHEN lead_source_original_category="Marketing" and LOWER(commercial_channel) like '%paid%' and marketing_subchannel= 'content syndication' THEN 'content syndication'
+    when lead_source_original_category="Marketing" and LOWER(commercial_channel) like '%paid%' and marketing_subchannel <> 'content syndication' then 'paid'
+    when lead_source_original_category="Marketing" and LOWER(commercial_channel) not like '%paid%' then 'non-paid'
+    ELSE null END is not null
+)
+group by all
+) a
