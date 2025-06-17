@@ -1,0 +1,31 @@
+SELECT
+  metric,
+  value_type,
+  CASE
+    WHEN metric = "Closed Won" THEN DATE_TRUNC(DATE(sf_close_date),WEEK)
+    WHEN metric = "Closed Lost" THEN DATE_TRUNC(DATE(sf_close_date),WEEK)
+    WHEN metric = "Created" THEN DATE_TRUNC(DATE(sf_created_date), WEEK)
+    WHEN metric = "Qualified SAL" THEN DATE_TRUNC(DATE(qualified_sal_date),WEEK)
+  END AS week_start,
+  quarter,
+  year,
+  ops_lead_source,
+  sales_region,
+  ops_market_segment,
+  opportunity_type,
+  sum(value) as total_val
+
+FROM `sdp-for-analysts-platform.rev_ops_prod.modelled_rad`
+
+WHERE
+  dataset = "Actuals" AND
+  metric IN ('Closed Won','Created','Qualified SAL','Closed Lost') AND
+  value_type IN ('Total Revenue', 'Opportunity Deal Count') AND
+  year IN (2024, 2025) AND
+  ops_lead_source = "Inbound" AND
+  opportunity_type = "New Business" AND
+  ops_market_segment IN ('Mid Market',"Large Accounts","Enterprise","SMB Acquisition")
+group by all
+order by metric, value_type, week_start
+  
+
