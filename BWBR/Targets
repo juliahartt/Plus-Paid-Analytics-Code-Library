@@ -1,0 +1,21 @@
+SELECT
+  metric,
+  value_type,
+  DATE_TRUNC(DATE(full_date),WEEK) as week_start,
+  quarter,
+  ops_lead_source,
+  sales_region,
+  ops_market_segment,
+  sum(value) as total_val
+
+FROM `sdp-for-analysts-platform.rev_ops_prod.modelled_rad`
+
+WHERE
+  dataset = "Targets" AND
+  metric IN ('Created Lead','Qualified Lead','Created','Qualified SAL','Closed Won') AND
+  value_type IN ('Lead Count','Lead Count','Total Revenue', 'Opportunity Deal Count') AND
+  year = 2025 AND
+  ops_lead_source = "Inbound" AND
+  ops_market_segment IN ("Mid Market","Large Accounts","Enterprise","SMB Acquisition")
+group by all
+order by metric, value_type, week_start
