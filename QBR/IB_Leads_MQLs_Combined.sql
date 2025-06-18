@@ -1,4 +1,5 @@
--- Combined IB Leads and MQLs: Lead, MQL, and DLV by segment, date, region, channel_category, with 'All' rollup and previous period columns
+-- Combined IB Leads and MQLs: Lead, MQL, and DLV by segment, date, region, channel_category, with previous period columns
+-- To filter for a specific year_quarter, set the value of @filter_year_quarter (e.g., '2025 Q2')
 WITH base AS (
   SELECT 
     lv.segment,
@@ -112,24 +113,4 @@ SELECT
   prev_quarter_dlv,
   prev_year_quarter_dlv
 FROM with_prev
-
-UNION ALL
-
-SELECT
-  'All' AS segment,
-  date,
-  year_quarter,
-  region,
-  channel_category,
-  SUM(lead) AS lead,
-  SUM(mql) AS mql,
-  SUM(dlv) AS dlv,
-  SUM(prev_quarter_lead) AS prev_quarter_lead,
-  SUM(prev_year_quarter_lead) AS prev_year_quarter_lead,
-  SUM(prev_quarter_mql) AS prev_quarter_mql,
-  SUM(prev_year_quarter_mql) AS prev_year_quarter_mql,
-  SUM(prev_quarter_dlv) AS prev_quarter_dlv,
-  SUM(prev_year_quarter_dlv) AS prev_year_quarter_dlv
-FROM with_prev
-GROUP BY date, year_quarter, region, channel_category
 ORDER BY segment, date, region, channel_category; 

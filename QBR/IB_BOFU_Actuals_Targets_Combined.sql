@@ -1,15 +1,18 @@
--- Combined IB BOFU Actuals and IB Targets RAD: Pull both target and actuals data, with previous quarter and previous year quarter columns, and 'All' segment rollup
+-- Combined IB BOFU Actuals and IB Targets RAD: Pull both target and actuals data, aggregated to quarter, with previous quarter and previous year quarter columns
 WITH combined AS (
   SELECT
     'Actuals' AS data_type,
     metric,
     value_type,
-    CASE
-      WHEN metric = 'Closed Won' THEN DATE_TRUNC(DATE(sf_close_date), WEEK)
-      WHEN metric = 'Closed Lost' THEN DATE_TRUNC(DATE(sf_close_date), WEEK)
-      WHEN metric = 'Created' THEN DATE_TRUNC(DATE(sf_created_date), WEEK)
-      WHEN metric = 'Qualified SAL' THEN DATE_TRUNC(DATE(qualified_sal_date), WEEK)
-      ELSE NULL END AS week_start,
+    DATE_TRUNC(
+      CASE
+        WHEN metric = 'Closed Won' THEN DATE(sf_close_date)
+        WHEN metric = 'Closed Lost' THEN DATE(sf_close_date)
+        WHEN metric = 'Created' THEN DATE(sf_created_date)
+        WHEN metric = 'Qualified SAL' THEN DATE(qualified_sal_date)
+        ELSE NULL END,
+      QUARTER
+    ) AS quarter_start,
     quarter,
     year,
     ops_lead_source,
@@ -34,7 +37,7 @@ WITH combined AS (
     'Targets' AS data_type,
     metric,
     value_type,
-    DATE_TRUNC(DATE(full_date), WEEK) AS week_start,
+    DATE_TRUNC(DATE(full_date), QUARTER) AS quarter_start,
     quarter,
     year,
     ops_lead_source,
@@ -53,52 +56,47 @@ WITH combined AS (
   GROUP BY ALL
 )
 
+, agg_quarter AS (
+  SELECT
+    data_type,
+    metric,
+    value_type,
+    quarter_start,
+    quarter,
+    year,
+    ops_lead_source,
+    sales_region,
+    ops_market_segment,
+    opportunity_type,
+    SUM(total_val) AS total_val
+  FROM combined
+  GROUP BY data_type, metric, value_type, quarter_start, quarter, year, ops_lead_source, sales_region, ops_market_segment, opportunity_type
+)
+
 , with_prev AS (
   SELECT
     curr.*,
     prev_q.total_val AS prev_quarter_total_val,
     prev_yq.total_val AS prev_year_quarter_total_val
-  FROM combined curr
-  LEFT JOIN combined prev_q
+  FROM agg_quarter curr
+  LEFT JOIN agg_quarter prev_q
     ON curr.data_type = prev_q.data_type
     AND curr.metric = prev_q.metric
     AND curr.value_type = prev_q.value_type
     AND curr.sales_region = prev_q.sales_region
     AND curr.ops_market_segment = prev_q.ops_market_segment
     AND curr.opportunity_type IS NOT DISTINCT FROM prev_q.opportunity_type
-    AND curr.week_start = DATE_ADD(prev_q.week_start, INTERVAL 1 QUARTER)
-  LEFT JOIN combined prev_yq
+    AND curr.quarter_start = DATE_ADD(prev_q.quarter_start, INTERVAL 1 QUARTER)
+  LEFT JOIN agg_quarter prev_yq
     ON curr.data_type = prev_yq.data_type
     AND curr.metric = prev_yq.metric
     AND curr.value_type = prev_yq.value_type
     AND curr.sales_region = prev_yq.sales_region
     AND curr.ops_market_segment = prev_yq.ops_market_segment
     AND curr.opportunity_type IS NOT DISTINCT FROM prev_yq.opportunity_type
-    AND curr.week_start = DATE_ADD(prev_yq.week_start, INTERVAL 1 YEAR)
-)
-
-, with_all AS (
-  SELECT * FROM with_prev
-  UNION ALL
-  SELECT
-    data_type,
-    metric,
-    value_type,
-    week_start,
-    quarter,
-    year,
-    ops_lead_source,
-    sales_region,
-    'All' AS ops_market_segment,
-    opportunity_type,
-    SUM(total_val) AS total_val,
-    SUM(prev_quarter_total_val) AS prev_quarter_total_val,
-    SUM(prev_year_quarter_total_val) AS prev_year_quarter_total_val
-  FROM with_prev
-  WHERE ops_market_segment IN ('Enterprise', 'Large Accounts', 'Mid Market')
-  GROUP BY data_type, metric, value_type, week_start, quarter, year, ops_lead_source, sales_region, opportunity_type
+    AND curr.quarter_start = DATE_ADD(prev_yq.quarter_start, INTERVAL 1 YEAR)
 )
 
 SELECT *
-FROM with_all
-ORDER BY data_type, metric, value_type, week_start, ops_market_segment; 
+FROM with_prev
+ORDER BY data_type, metric, value_type, quarter_start, ops_market_segment; 
