@@ -1,0 +1,14 @@
+SELECT campaign_name,
+ad_name,
+campaign_region,
+campaign_subregion,
+SUM(spend_usd) spend,
+SUM(leads_attributed) leads_created,
+SAFE_DIVIDE(SUM(spend_usd), SUM(leads_attributed)) cpl,
+SUM(lead_dollar_value_adjusted) adjusted_dlv,
+SAFE_DIVIDE(SUM(spend_usd), (SUM(lead_dollar_value_adjusted) / 36)) payback
+FROM `shopify-dw.scratch.revmkt_dollar_lead_value_ad_attribution_spend`
+WHERE date>= '2025-01-01'
+AND cost_center_sub_group='Plus'
+--AND LOWER(campaign_name) LIKE '%brand%core%brand'
+GROUP BY ALL
