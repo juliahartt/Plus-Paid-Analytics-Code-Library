@@ -1,3 +1,7 @@
+----------------------------------------------------------------------------------------------------------
+----------------------------- USED IN REVOPS QBR DASHBOARD / MARKETING PAGE ------------------------------
+----------------------------------------------------------------------------------------------------------
+
 -- Combined IB Leads and MQLs: Lead, MQL, and DLV by segment, date, region, channel_category, with previous period columns
 -- To filter for a specific year_quarter, set the value of @filter_year_quarter (e.g., '2025 Q2')
 WITH base AS (
