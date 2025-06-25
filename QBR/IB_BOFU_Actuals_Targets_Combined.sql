@@ -1,3 +1,6 @@
+----------------------------------------------------------------------------------------------------------
+----------------------------- USED IN REVOPS QBR DASHBOARD / MARKETING PAGE ------------------------------
+----------------------------------------------------------------------------------------------------------
 -- Combined IB BOFU Actuals and IB Targets RAD: Pull both target and actuals data, aggregated to quarter, with previous quarter and previous year quarter columns
 WITH combined AS (
   SELECT
