@@ -1,0 +1,381 @@
+------------------------------------
+---------built with Cursor----------
+------------------------------------
+
+WITH base AS (
+  SELECT
+    DATE_TRUNC(DATE(dlv.date), WEEK(MONDAY)) as week_starting_monday,
+    campaign_region,
+    spend_marketing_channel,
+    spend_marketing_subchannel,
+    case when spend_is_branded is true then 'Branded'
+          when spend_is_branded is false then 'Non-Branded'  else 'Unknown' end as spend_is_branded, 
+    SUM(spend_usd) as Spend,
+    SUM(leads_attributed) as Leads,
+    SUM(ileads_attributed) as iLeads,
+    SUM(adjusted_dollar_lead_value_usd) as DLV,
+    SUM(iadjusted_dollar_lead_value_usd) as iDLV,
+    -- Leads by segment (using d2c columns)
+    SUM(d2c_enterprise_leads) as Leads_ent,
+    SUM(d2c_mid_mkt_leads) as Leads_mm, -- mid-market
+    SUM(d2c_large_leads) as Leads_large,
+    SUM(d2c_smb_leads) as Leads_smb,
+    SUM(d2c_self_serve_leads) as Leads_self_serve,
+    -- iLeads by segment (using d2c columns)
+    SUM(d2c_enterprise_ileads) as iLeads_ent,
+    SUM(d2c_mid_mkt_ileads) as iLeads_mm, -- mid-market
+    SUM(d2c_large_ileads) as iLeads_large,
+    SUM(d2c_smb_ileads) as iLeads_smb,
+    SUM(d2c_self_serve_ileads) as iLeads_self_serve
+  FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback` dlv
+  WHERE DATE(dlv.date) >= '2025-01-01'
+    AND campaign_region in ('AMER','EMEA','APAC')
+  GROUP BY ALL
+),
+mqls AS (
+  SELECT 
+    DATE_TRUNC(DATE(l.new_sales_ready_at), WEEK(MONDAY)) as week_starting_monday,
+    COALESCE(TRIM(IF(ARRAY_LENGTH(SPLIT(lv.spend_campaign_name,'|')) = 14, SPLIT(lv.spend_campaign_name,'|'), null)[SAFE_OFFSET(5)]),"Unknown Region") AS region,
+    lv.marketing_channel,
+    lv.marketing_subchannel,
+    SUM(CASE WHEN DATE(l.new_sales_ready_at) IS NOT NULL THEN 1 ELSE 0 END) AS MQLs
+ FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_attribution` lv
+  JOIN `shopify-dw.sales.sales_leads` l ON lv.lead_id = l.lead_id
+  JOIN `shopify-dw.raw_salesforce_banff.lead` bl ON lv.lead_id = bl.id
+  WHERE lv.is_last_touchpoint = True 
+    AND l.lead_source_original_category="Marketing"
+    AND lv.product IN ('Plus', 'Commerce Components','B2B')
+    AND DATE(l.new_sales_ready_at) >= '2025-01-01'
+    AND NOT (
+  l.lead_source_original = 'Content Syndication'
+  OR (
+    l.lead_source_original = 'Content'
+    AND (
+      LOWER(bl.UTM_Source__c) LIKE '%madisonlogic%'
+      OR LOWER(bl.UTM_Source__c) LIKE '%techtarget%'
+      OR LOWER(bl.UTM_Source__c) LIKE '%integrate%'
+    )
+    )
+      )
+  GROUP BY all
+),
+combined as(
+  SELECT
+    b.week_starting_monday,
+    b.campaign_region,
+    b.spend_marketing_channel,
+    b.spend_marketing_subchannel,
+    b.spend_is_branded,
+    b.Spend,
+    b.Leads,
+    b.iLeads,
+    b.DLV,
+    b.iDLV,
+    m.MQLs,
+    b.Leads_ent,
+    b.Leads_mm,
+    b.Leads_large,
+    b.Leads_smb,
+    b.Leads_self_serve,
+    b.iLeads_ent,
+    b.iLeads_mm,
+    b.iLeads_large,
+    b.iLeads_smb,
+    b.iLeads_self_serve
+  FROM base b
+  LEFT JOIN mqls m
+    ON b.week_starting_monday = m.week_starting_monday
+    AND b.campaign_region = m.region
+    AND b.spend_marketing_channel = m.marketing_channel
+    AND b.spend_marketing_subchannel = m.marketing_subchannel
+  ORDER BY
+    week_starting_monday DESC,
+    region,
+    marketing_channel,
+    marketing_subchannel,
+    spend_is_branded
+),
+all_levels AS (
+  -- Global
+  SELECT
+    week_starting_monday,
+    NULL as campaign_region,
+    NULL as spend_marketing_channel,
+    NULL as spend_marketing_subchannel,
+    NULL as spend_is_branded,
+    'Global' as group_level,
+    SUM(Spend) as Spend,
+    SUM(Leads) as Leads,
+    SUM(iLeads) as iLeads,
+    SUM(DLV) as DLV,
+    SUM(iDLV) as iDLV,
+    SUM(MQLs) as MQLs,
+    SUM(Leads_ent) as Leads_ent,
+    SUM(Leads_mm) as Leads_mm,
+    SUM(Leads_large) as Leads_large,
+    SUM(Leads_smb) as Leads_smb,
+    SUM(Leads_self_serve) as Leads_self_serve,
+    SUM(iLeads_ent) as iLeads_ent,
+    SUM(iLeads_mm) as iLeads_mm,
+    SUM(iLeads_large) as iLeads_large,
+    SUM(iLeads_smb) as iLeads_smb,
+    SUM(iLeads_self_serve) as iLeads_self_serve
+  FROM combined GROUP BY week_starting_monday
+
+  UNION ALL
+  -- Region
+  SELECT
+    week_starting_monday,
+    campaign_region,
+    NULL,
+    NULL,
+    NULL,
+    'Region',
+    SUM(Spend),
+    SUM(Leads),
+    SUM(iLeads),
+    SUM(DLV),
+    SUM(iDLV),
+    SUM(MQLs),
+    SUM(Leads_ent),
+    SUM(Leads_mm),
+    SUM(Leads_large),
+    SUM(Leads_smb),
+    SUM(Leads_self_serve),
+    SUM(iLeads_ent),
+    SUM(iLeads_mm),
+    SUM(iLeads_large),
+    SUM(iLeads_smb),
+    SUM(iLeads_self_serve)
+  FROM combined GROUP BY week_starting_monday, campaign_region
+
+  UNION ALL
+  -- Channel
+  SELECT
+    week_starting_monday,
+    campaign_region,
+    spend_marketing_channel,
+    NULL,
+    NULL,
+    'Channel',
+    SUM(Spend),
+    SUM(Leads),
+    SUM(iLeads),
+    SUM(DLV),
+    SUM(iDLV),
+    SUM(MQLs),
+    SUM(Leads_ent),
+    SUM(Leads_mm),
+    SUM(Leads_large),
+    SUM(Leads_smb),
+    SUM(Leads_self_serve),
+    SUM(iLeads_ent),
+    SUM(iLeads_mm),
+    SUM(iLeads_large),
+    SUM(iLeads_smb),
+    SUM(iLeads_self_serve)
+  FROM combined GROUP BY week_starting_monday, campaign_region, spend_marketing_channel
+
+  UNION ALL
+  -- Subchannel
+  SELECT
+    week_starting_monday,
+    campaign_region,
+    spend_marketing_channel,
+    spend_marketing_subchannel,
+    NULL,
+    'Subchannel',
+    SUM(Spend),
+    SUM(Leads),
+    SUM(iLeads),
+    SUM(DLV),
+    SUM(iDLV),
+    SUM(MQLs),
+    SUM(Leads_ent),
+    SUM(Leads_mm),
+    SUM(Leads_large),
+    SUM(Leads_smb),
+    SUM(Leads_self_serve),
+    SUM(iLeads_ent),
+    SUM(iLeads_mm),
+    SUM(iLeads_large),
+    SUM(iLeads_smb),
+    SUM(iLeads_self_serve)
+  FROM combined GROUP BY week_starting_monday, campaign_region, spend_marketing_channel, spend_marketing_subchannel
+
+  UNION ALL
+  -- Spend_is_branded
+  SELECT
+    week_starting_monday,
+    campaign_region,
+    spend_marketing_channel,
+    spend_marketing_subchannel,
+    spend_is_branded,
+    'Branded' as group_level,
+    SUM(Spend),
+    SUM(Leads),
+    SUM(iLeads),
+    SUM(DLV),
+    SUM(iDLV),
+    SUM(MQLs),
+    SUM(Leads_ent),
+    SUM(Leads_mm),
+    SUM(Leads_large),
+    SUM(Leads_smb),
+    SUM(Leads_self_serve),
+    SUM(iLeads_ent),
+    SUM(iLeads_mm),
+    SUM(iLeads_large),
+    SUM(iLeads_smb),
+    SUM(iLeads_self_serve)
+  FROM combined
+  GROUP BY week_starting_monday, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded
+),
+
+lagged AS (
+  SELECT
+    *,
+    LAG(Spend) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel,spend_is_branded ORDER BY week_starting_monday) AS Prev_Spend,
+    LAG(Leads) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_Leads,
+    LAG(iLeads) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_iLeads,
+    LAG(DLV) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_DLV,
+    LAG(iDLV) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_iDLV,
+    LAG(MQLs) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_MQLs,
+    LAG(Leads_ent) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_Leads_ent,
+    LAG(Leads_mm) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_Leads_mm,
+    LAG(Leads_large) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_Leads_large,
+    LAG(Leads_smb) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_Leads_smb,
+    LAG(Leads_self_serve) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_Leads_self_serve,
+    LAG(iLeads_ent) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_iLeads_ent,
+    LAG(iLeads_mm) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_iLeads_mm,
+    LAG(iLeads_large) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_iLeads_large,
+    LAG(iLeads_smb) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_iLeads_smb,
+    LAG(iLeads_self_serve) OVER (PARTITION BY group_level, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded ORDER BY week_starting_monday) AS Prev_iLeads_self_serve
+  FROM all_levels
+   where week_starting_monday  < DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY))
+),
+recent_weeks AS (
+  SELECT week_starting_monday FROM (
+    SELECT week_starting_monday
+    FROM lagged
+    WHERE week_starting_monday < DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY))
+    GROUP BY week_starting_monday
+    ORDER BY week_starting_monday DESC
+    LIMIT 2
+  )
+),
+latest_week AS (
+  SELECT MAX(week_starting_monday) AS max_week FROM lagged
+)
+SELECT
+  1 + FLOOR(DATE_DIFF(week_starting_monday, DATE '2024-12-30', WEEK(MONDAY))) AS week_number,
+  week_starting_monday,
+  group_level,
+  campaign_region,
+  spend_marketing_channel,
+  spend_marketing_subchannel,
+  spend_is_branded,
+
+  -- Latest values
+  Spend,
+  Leads,
+  iLeads,
+  DLV,
+  iDLV,
+  Leads_ent,
+  Leads_mm,
+  Leads_large,
+  Leads_smb,
+  Leads_self_serve,
+  iLeads_ent,
+  iLeads_mm,
+  iLeads_large,
+  iLeads_smb,
+  iLeads_self_serve,
+  SAFE_DIVIDE(Spend, Leads) AS CPL,
+  SAFE_DIVIDE(DLV, Leads) AS DLV_per_Lead,
+  SAFE_DIVIDE(Spend, iLeads) AS iCPL,
+  SAFE_DIVIDE(iDLV, iLeads) AS iDLV_per_iLead,
+  SAFE_DIVIDE(Spend, MQLs) AS CPMQL,
+  MQLs,
+  SAFE_DIVIDE(MQLs, Leads) AS MQL_per_Lead,
+
+  -- Previous values
+  Prev_Spend,
+  Prev_Leads,
+  Prev_iLeads,
+  Prev_DLV,
+  Prev_iDLV,
+  Prev_Leads_ent,
+  Prev_Leads_mm,
+  Prev_Leads_large,
+  Prev_Leads_smb,
+  Prev_Leads_self_serve,
+  Prev_iLeads_ent,
+  Prev_iLeads_mm,
+  Prev_iLeads_large,
+  Prev_iLeads_smb,
+  Prev_iLeads_self_serve,
+  SAFE_DIVIDE(Prev_Spend, Prev_Leads) AS Prev_CPL,
+  SAFE_DIVIDE(Prev_DLV, Prev_Leads) AS Prev_DLV_per_Lead,
+  SAFE_DIVIDE(Prev_Spend, Prev_iLeads) AS Prev_iCPL,
+  SAFE_DIVIDE(Prev_iDLV, Prev_iLeads) AS Prev_iDLV_per_iLead,
+  SAFE_DIVIDE(Prev_Spend, Prev_MQLs) AS Prev_CPMQL,
+  Prev_MQLs,
+  SAFE_DIVIDE(Prev_MQLs, Prev_Leads) AS Prev_MQL_per_Lead,
+
+  -- WoW pct changes (only for latest week)
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(Spend - Prev_Spend, Prev_Spend) ELSE NULL END AS Spend_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(Leads - Prev_Leads, Prev_Leads) ELSE NULL END AS Leads_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(iLeads - Prev_iLeads, Prev_iLeads) ELSE NULL END AS iLeads_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(DLV - Prev_DLV, Prev_DLV) ELSE NULL END AS DLV_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(iDLV - Prev_iDLV, Prev_iDLV) ELSE NULL END AS iDLV_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(Leads_ent - Prev_Leads_ent, Prev_Leads_ent) ELSE NULL END AS Leads_ent_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(Leads_mm - Prev_Leads_mm, Prev_Leads_mm) ELSE NULL END AS Leads_mm_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(Leads_large - Prev_Leads_large, Prev_Leads_large) ELSE NULL END AS Leads_large_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(Leads_smb - Prev_Leads_smb, Prev_Leads_smb) ELSE NULL END AS Leads_smb_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(Leads_self_serve - Prev_Leads_self_serve, Prev_Leads_self_serve) ELSE NULL END AS Leads_self_serve_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(iLeads_ent - Prev_iLeads_ent, Prev_iLeads_ent) ELSE NULL END AS iLeads_ent_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(iLeads_mm - Prev_iLeads_mm, Prev_iLeads_mm) ELSE NULL END AS iLeads_mm_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(iLeads_large - Prev_iLeads_large, Prev_iLeads_large) ELSE NULL END AS iLeads_large_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(iLeads_smb - Prev_iLeads_smb, Prev_iLeads_smb) ELSE NULL END AS iLeads_smb_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(iLeads_self_serve - Prev_iLeads_self_serve, Prev_iLeads_self_serve) ELSE NULL END AS iLeads_self_serve_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(SAFE_DIVIDE(Spend, Leads) - SAFE_DIVIDE(Prev_Spend, Prev_Leads), SAFE_DIVIDE(Prev_Spend, Prev_Leads)) ELSE NULL END AS CPL_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(SAFE_DIVIDE(DLV, Leads) - SAFE_DIVIDE(Prev_DLV, Prev_Leads), SAFE_DIVIDE(Prev_DLV, Prev_Leads)) ELSE NULL END AS DLV_per_Lead_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(SAFE_DIVIDE(Spend, iLeads) - SAFE_DIVIDE(Prev_Spend, Prev_iLeads), SAFE_DIVIDE(Prev_Spend, Prev_iLeads)) ELSE NULL END AS iCPL_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(SAFE_DIVIDE(iDLV, iLeads) - SAFE_DIVIDE(Prev_iDLV, Prev_iLeads), SAFE_DIVIDE(Prev_iDLV, Prev_iLeads)) ELSE NULL END AS iDLV_per_iLead_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(SAFE_DIVIDE(Spend, MQLs) - SAFE_DIVIDE(Prev_Spend, Prev_MQLs), SAFE_DIVIDE(Prev_Spend, Prev_MQLs)) ELSE NULL END AS CPMQL_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(MQLs - Prev_MQLs, Prev_MQLs) ELSE NULL END AS MQLs_wow_pct,
+  CASE WHEN week_starting_monday = (SELECT max_week FROM latest_week)
+    THEN SAFE_DIVIDE(SAFE_DIVIDE(MQLs, Leads) - SAFE_DIVIDE(Prev_MQLs, Prev_Leads), SAFE_DIVIDE(Prev_MQLs, Prev_Leads)) ELSE NULL END AS MQL_per_Lead_wow_pct
+
+FROM lagged
+WHERE week_starting_monday < DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY))
+ORDER BY
+  week_starting_monday DESC,
+  group_level,
+  campaign_region,
+  spend_marketing_channel,
+  spend_marketing_subchannel,
+  spend_is_branded
