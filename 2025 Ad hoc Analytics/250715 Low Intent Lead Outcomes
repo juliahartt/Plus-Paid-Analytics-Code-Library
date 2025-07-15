@@ -1,16 +1,32 @@
-SELECT
-  DATE_TRUNC(DATE(l.created_at), MONTH) AS lead_month,
-  l.lead_source_original AS lead_source,
-  COUNT(DISTINCT lv.lead_id) AS lead_volume,
-  SUM(lv.last_touch_adjusted_dlv_usd) AS dlv,
-  SUM(lv.last_touch_iadjusted_dlv_usd) AS idlv
-FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_attribution` lv
-JOIN `shopify-dw.sales.sales_leads` l
-  ON lv.lead_id = l.lead_id
-JOIN `shopify-dw.raw_salesforce_banff.lead` bl
-  ON lv.lead_id = bl.id
-WHERE lv.is_last_touchpoint IS TRUE
-  AND lv.product IN ('Plus', 'Commerce Components')
-  AND DATE(l.created_at) >= '2024-01-01'
-GROUP BY 1, 2
-ORDER BY 1, 2;
+select 
+  lv.lead_id, 
+  lv.lead_created_at,
+  lv.segment,
+  lv.product,
+  lv.region,
+  lv.lead_source,
+  lv.lead_score,
+  lv.last_touch_adjusted_dlv_usd,
+  lv.last_touch_iadjusted_dlv_usd,
+  sl.converted_contact_id,
+  sl.converted_account_id,
+  opp.opportunity_id,
+  opp.name AS opportunity_name,
+  opp.current_stage_name,
+  opp.created_at,
+  opp.close_date,
+  opp.total_revenue_usd
+
+from `shopify-dw.mart_commercial_optimization.dollar_lead_value_attribution` lv
+left join `shopify-dw.sales.sales_leads` sl
+  ON lv.lead_id = sl.lead_id
+
+left join `shopify-dw.sales.sales_opportunities` opp
+  ON sl.converted_account_id = opp.salesforce_account_id
+
+where lv.lead_created_at >= '2024-01-01'
+and is_last_touchpoint IS TRUE
+and lv.lead_source IN ('Content','Webinar')
+and lv.spend_cost_center_sub_group = 'Plus'
+order by lv.last_touch_adjusted_dlv_usd desc
+
