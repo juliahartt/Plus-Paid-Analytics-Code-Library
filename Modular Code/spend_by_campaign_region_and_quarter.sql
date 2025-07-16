@@ -1,0 +1,26 @@
+/*
+=============================================================================
+SPEND BY CAMPAIGN REGION AND QUARTER SCRIPT
+=============================================================================
+
+DESCRIPTION:
+This query pulls total spend (spend_usd) by campaign_region and by quarter from the
+dollar_lead_value_payback dataset, filtered for cost center subgroup 'Plus'
+since 2024-01-01.
+=============================================================================
+*/
+
+SELECT
+  campaign_region,
+  CONCAT(EXTRACT(YEAR FROM date), '-Q', EXTRACT(QUARTER FROM date)) AS year_quarter,
+  SUM(spend_usd) AS total_spend_usd
+FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback`
+WHERE
+  date >= '2024-01-01'
+  AND spend_cost_center_sub_group = 'Plus'
+GROUP BY
+  campaign_region,
+  year_quarter
+ORDER BY
+  campaign_region,
+  year_quarter DESC; 
