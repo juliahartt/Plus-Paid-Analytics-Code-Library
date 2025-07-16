@@ -1,5 +1,6 @@
 ----------------------------------------------------------------------------------------------------------
 ----------------------------- USED IN REVOPS QBR DASHBOARD / MARKETING PAGE ------------------------------
+-------------------------------------- SCRIPT: Mktg_QBR_Dash_TOFU ----------------------------------------
 ----------------------------------------------------------------------------------------------------------
 
 -- Combined IB Leads and MQLs: Lead, MQL, and DLV by segment, date, region, channel_category, with previous period columns
@@ -43,7 +44,7 @@ WITH base AS (
         WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) NOT LIKE '%paid%' THEN 'non-paid'
         ELSE NULL END
     ) IS NOT NULL
-    AND lv.segment IN ('Enterprise', 'Large', 'Mid-Mkt')
+    AND lv.segment IN ('Enterprise', 'Large', 'Mid-Mkt','SMB')
 )
 
 , agg AS (

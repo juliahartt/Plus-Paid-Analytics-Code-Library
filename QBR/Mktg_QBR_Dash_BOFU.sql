@@ -1,5 +1,6 @@
 ----------------------------------------------------------------------------------------------------------
 ----------------------------- USED IN REVOPS QBR DASHBOARD / MARKETING PAGE ------------------------------
+-------------------------------------- SCRIPT: Mktg_QBR_Dash_BOFU ----------------------------------------
 ----------------------------------------------------------------------------------------------------------
 -- Combined IB BOFU Actuals and IB Targets RAD: Pull both target and actuals data, aggregated to quarter, with previous quarter and previous year quarter columns
 WITH combined AS (
@@ -31,7 +32,7 @@ WITH combined AS (
     AND year IN (2024, 2025)
     AND ops_lead_source = 'Inbound'
     AND opportunity_type = 'New Business'
-    AND ops_market_segment IN ('Mid Market','Large Accounts','Enterprise')
+    AND ops_market_segment IN ('Mid Market','Large Accounts','Enterprise','SMB Acquisition')
   GROUP BY ALL
 
   UNION ALL
@@ -55,7 +56,7 @@ WITH combined AS (
     AND value_type IN ('Lead Count','Lead Count','Total Revenue', 'Opportunity Deal Count')
     AND year = 2025
     AND ops_lead_source = 'Inbound'
-    AND ops_market_segment IN ('Mid Market','Large Accounts','Enterprise')
+    AND ops_market_segment IN ('Mid Market','Large Accounts','Enterprise','SMB Acquisition')
   GROUP BY ALL
 )
 
