@@ -1,0 +1,32 @@
+WITH dlv_per_lead AS (
+SELECT
+lead_id,
+last_touch_adjusted_dlv_usd
+FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_attribution`
+WHERE is_last_touchpoint
+),
+
+traffic_by_path AS (
+SELECT
+t.page_view_token,
+a.lead_id,
+url.path AS url_path
+FROM `shopify-dw.marketing.unified_website_brochure_page_views_v2` t
+JOIN `shopify-dw.sales.sales_lead_attribution` a
+ON a.touchpoint_id = t.page_view_token
+WHERE (a.touchpoint_details LIKE '%plus%' OR a.line_of_business = 'Plus')
+AND t.viewed_at >= '2025-01-01'
+)
+
+SELECT
+tbp.url_path,
+--d.lead_id,
+COUNT(DISTINCT tbp.lead_id) AS total_leads,
+SUM(d.last_touch_adjusted_dlv_usd) AS total_dlv,
+AVG(d.last_touch_adjusted_dlv_usd) AS avg_dlv_per_lead
+FROM traffic_by_path tbp
+JOIN dlv_per_lead d
+ON tbp.lead_id = d.lead_id
+--WHERE tbp.url_path='/es/compare/tco'
+GROUP BY ALL
+ORDER BY total_dlv DESC
