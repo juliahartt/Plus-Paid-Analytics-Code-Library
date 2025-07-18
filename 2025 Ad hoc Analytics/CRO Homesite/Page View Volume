@@ -1,0 +1,15 @@
+select url.path,
+a.campaign_name,
+a.marketing_channel,
+a.marketing_subchannel,
+a.marketing_type,
+a.acquisition_lever,
+a.commercial_channel,
+t.user_agent. device_type,
+t.pageview_url,
+COUNT(t.page_view_token) page_views
+from `shopify-dw.marketing.unified_website_brochure_page_views_v2` t
+join `shopify-dw.sales.sales_lead_attribution` a ON a.touchpoint_id = t.page_view_token
+WHERE (a.touchpoint_details LIKE '%plus%' OR a.line_of_business='Plus')
+AND t.viewed_at >= '2025-01-01'
+GROUP BY ALL
