@@ -1,0 +1,12 @@
+-- Plus lead volume by Industry and Segment --
+SELECT
+lead_source_original,
+l.industry,
+routing_segment,
+COUNT(DISTINCT lead_id) leads
+FROM `shopify-dw.sales.sales_leads` l
+JOIN `shopify-dw.raw_salesforce_banff.lead` ll
+ON ll.id=l.lead_id
+WHERE primary_product_interest='Plus'
+AND created_at>= '2025-01-01'
+GROUP BY ALL
