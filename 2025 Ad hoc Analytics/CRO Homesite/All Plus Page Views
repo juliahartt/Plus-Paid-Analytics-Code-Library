@@ -1,6 +1,7 @@
 -- page views which did not necessarily convert to leads --
 SELECT
 url.path,
+pageview_url,
 url_utm.campaign,
 COUNT(*) Page_views
 FROM `shopify-dw.marketing.unified_website_brochure_page_views_v2`

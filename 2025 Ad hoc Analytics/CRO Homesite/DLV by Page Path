@@ -1,7 +1,9 @@
 WITH dlv_per_lead AS (
 SELECT
 lead_id,
-last_touch_adjusted_dlv_usd
+last_touch_adjusted_dlv_usd,
+last_touch_iadjusted_dlv_usd,
+lead_score
 FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_attribution`
 WHERE is_last_touchpoint
 ),
@@ -16,17 +18,29 @@ JOIN `shopify-dw.sales.sales_lead_attribution` a
 ON a.touchpoint_id = t.page_view_token
 WHERE (a.touchpoint_details LIKE '%plus%' OR a.line_of_business = 'Plus')
 AND t.viewed_at >= '2025-01-01'
-)
+),
 
+joined_data AS (
 SELECT
 tbp.url_path,
---d.lead_id,
-COUNT(DISTINCT tbp.lead_id) AS total_leads,
-SUM(d.last_touch_adjusted_dlv_usd) AS total_dlv,
-AVG(d.last_touch_adjusted_dlv_usd) AS avg_dlv_per_lead
+d.lead_id,
+d.last_touch_adjusted_dlv_usd,
+d.last_touch_iadjusted_dlv_usd,
+d.lead_score
 FROM traffic_by_path tbp
 JOIN dlv_per_lead d
 ON tbp.lead_id = d.lead_id
---WHERE tbp.url_path='/es/compare/tco'
-GROUP BY ALL
-ORDER BY total_dlv DESC
+)
+
+SELECT
+url_path,
+COUNT(DISTINCT lead_id) AS total_leads,
+SUM(last_touch_adjusted_dlv_usd) AS total_dlv,
+SUM(last_touch_iadjusted_dlv_usd) AS total_idlv,
+AVG(last_touch_adjusted_dlv_usd) AS avg_dlv_per_lead,
+AVG(last_touch_iadjusted_dlv_usd) AS avg_idlv_per_lead,
+SUM(lead_score) / COUNT(DISTINCT lead_id) AS avg_lead_score,
+APPROX_QUANTILES(lead_score, 2)[OFFSET(1)] AS median_lead_score
+FROM joined_data
+GROUP BY url_path
+ORDER BY total_dlv DESC;

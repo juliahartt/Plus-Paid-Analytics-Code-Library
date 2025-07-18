@@ -5,7 +5,12 @@ a.marketing_subchannel,
 a.marketing_type,
 a.acquisition_lever,
 a.commercial_channel,
-t.user_agent. device_type,
+CASE 
+  WHEN a.marketing_channel = 'sem' AND a.commercial_channel LIKE '%branded%' THEN 'Branded'
+  WHEN a.marketing_channel = 'sem' AND a.commercial_channel NOT LIKE '%branded%' THEN 'Non-Branded'
+  ELSE 'Other'
+END as sem_branded_flag,
+t.user_agent.device_type,
 t.pageview_url,
 COUNT(t.page_view_token) page_views
 from `shopify-dw.marketing.unified_website_brochure_page_views_v2` t
