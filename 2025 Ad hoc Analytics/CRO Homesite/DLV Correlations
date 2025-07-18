@@ -1,0 +1,53 @@
+-- For measuring consistent DLV & iDLV growth/decline by campaign, channel, etc. --
+-- Time vs DLV and Time vs iDLV --
+
+import pandas as pd
+from google.colab import files
+
+# Upload the file manually
+uploaded = files.upload()
+
+# Get the uploaded file name
+file_name = list(uploaded.keys())[0]
+
+# Load the CSV file
+monthly_df = pd.read_csv(file_name)
+
+# Convert 'month' to datetime format
+monthly_df['month'] = pd.to_datetime(monthly_df['month'])
+
+# Calculate relative month number for correlation
+start_month = monthly_df['month'].min()
+monthly_df['month_number'] = (
+    monthly_df['month'].dt.to_period("M") - start_month.to_period("M")
+).apply(lambda x: x.n)
+
+# Function to compute correlation per campaign
+def compute_monthly_correlations(df, value_col, min_months=3):
+    correlations = []
+    for campaign, group in df.groupby('campaign_name'):
+        group = group.dropna(subset=[value_col])
+        if len(group) >= min_months:
+            corr = group['month_number'].corr(group[value_col])
+            correlations.append({'campaign_name': campaign, 'correlation': corr})
+    return pd.DataFrame(correlations).dropna().sort_values(by='correlation', ascending=False)
+
+# Compute correlations
+monthly_corr_iDLV = compute_monthly_correlations(monthly_df, 'i_DLV')
+monthly_corr_DLV_adj = compute_monthly_correlations(monthly_df, 'DLV_adjusted')
+
+# Display results
+print("Top campaigns by i_DLV growth correlation:")
+print(monthly_corr_iDLV.head())
+
+print("\nTop campaigns by DLV_adjusted growth correlation:")
+print(monthly_corr_DLV_adj.head())
+
+
+# Print all correlations for i_DLV
+print("All campaigns by i_DLV growth correlation:")
+print(monthly_corr_iDLV.to_string(index=False))
+
+# Print all correlations for DLV_adjusted
+print("\nAll campaigns by DLV_adjusted growth correlation:")
+print(monthly_corr_DLV_adj.to_string(index=False))
