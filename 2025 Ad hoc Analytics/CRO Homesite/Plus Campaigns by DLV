@@ -1,0 +1,17 @@
+-- Plus campaigns with the highest DLV based on iDLV
+
+SELECT campaign_name,
+campaign_region,
+spend_marketing_channel,
+spend_marketing_subchannel,
+SUM(iadjusted_dollar_lead_value_usd) i_DLV,
+SUM(adjusted_dollar_lead_value_usd) DLV_adjusted
+FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback`
+WHERE spend_cost_center_sub_group='Plus'
+AND date>= '2025-01-01'
+
+GROUP BY campaign_name,
+campaign_region,
+spend_marketing_channel,
+spend_marketing_subchannel
+ORDER BY 5 DESC
