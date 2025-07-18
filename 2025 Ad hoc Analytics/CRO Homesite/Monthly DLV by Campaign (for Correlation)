@@ -1,0 +1,38 @@
+-- The query finds campaigns that have i_DLV data for every single month from when they first appeared until June 2025, with no missing months in between.
+
+WITH filtered_data AS (
+SELECT
+DATE_TRUNC(month, MONTH) AS month,
+campaign_name,
+SUM(iadjusted_dollar_lead_value_usd) AS i_DLV,
+SUM(adjusted_dollar_lead_value_usd) DLV_adjusted
+FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback`
+WHERE spend_cost_center_sub_group = 'Plus'
+AND campaign_name='LeadGenForm'
+AND date >= '2025-01-01'
+AND date < '2025-07-01'
+GROUP BY month, campaign_name
+HAVING i_DLV > 0
+),
+campaign_activity AS (
+SELECT
+campaign_name,
+MIN(month) AS first_month,
+MAX(month) AS last_month,
+COUNT(DISTINCT month) AS active_months
+FROM filtered_data
+GROUP BY campaign_name
+),
+campaigns_with_full_months AS (
+SELECT *,
+DATE_DIFF(last_month, first_month, MONTH) + 1 AS expected_months
+FROM campaign_activity
+WHERE active_months = DATE_DIFF(last_month, first_month, MONTH) + 1
+)
+
+-- Final result: campaigns with full monthly i_DLV data
+SELECT f.*
+FROM filtered_data f
+JOIN campaigns_with_full_months c
+ON f.campaign_name = c.campaign_name
+ORDER BY f.campaign_name, f.month
