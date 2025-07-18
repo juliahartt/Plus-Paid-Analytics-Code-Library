@@ -1,0 +1,9 @@
+-- page views which did not necessarily convert to leads --
+SELECT
+url.path,
+url_utm.campaign,
+COUNT(*) Page_views
+FROM `shopify-dw.marketing.unified_website_brochure_page_views_v2`
+WHERE viewed_at>= '2025-01-01'
+AND pageview_url LIKE '%plus%'
+GROUP BY ALL
