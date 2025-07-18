@@ -1,0 +1,69 @@
+WITH touchpoints_with_rank AS (
+SELECT
+lead_id,
+touchpoint_timestamp,
+ROW_NUMBER() OVER (PARTITION BY lead_id ORDER BY touchpoint_timestamp ASC) AS rn
+FROM `shopify-dw.intermediate.sales_lead_attribution_touchpoints`
+WHERE touchpoint_id_type = 'lead_submission_id'
+),
+
+first_submissions AS (
+SELECT
+lead_id,
+touchpoint_timestamp AS first_submission_time
+FROM touchpoints_with_rank
+WHERE rn = 1
+),
+
+plus_pageviews AS (
+SELECT
+p.url.path AS page_path,
+p.viewed_at,
+t.lead_id
+FROM `shopify-dw.marketing.unified_website_brochure_page_views_v2` p
+LEFT JOIN `shopify-dw.intermediate.sales_lead_attribution_touchpoints` t
+ON p.page_view_token = t.touchpoint_id
+WHERE
+p.viewed_at >= '2025-01-01'
+AND p.pageview_url LIKE '%plus%'
+),
+
+assisted_leads AS (
+SELECT DISTINCT
+pv.page_path,
+pv.lead_id
+FROM plus_pageviews pv
+JOIN first_submissions fs
+ON pv.lead_id = fs.lead_id
+AND pv.viewed_at <= fs.first_submission_time
+),
+
+lead_details AS (
+SELECT
+l.lead_id,
+l.routing_segment,
+l.industry,
+l.lead_source_original -- moved here from ll
+FROM `shopify-dw.sales.sales_leads` l
+JOIN `shopify-dw.raw_salesforce_banff.lead` ll
+ON ll.id = l.lead_id
+WHERE l.primary_product_interest IN ('Plus','Commerce Components')
+AND l.created_at >= '2025-01-01'
+)
+
+SELECT
+al.page_path,
+ld.lead_source_original,
+ld.industry,
+ld.routing_segment,
+COUNT(DISTINCT al.lead_id) AS assisted_leads
+FROM assisted_leads al
+JOIN lead_details ld
+ON al.lead_id = ld.lead_id
+GROUP BY
+al.page_path,
+ld.lead_source_original,
+ld.industry,
+ld.routing_segment
+ORDER BY
+assisted_leads DESC
