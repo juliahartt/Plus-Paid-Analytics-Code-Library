@@ -1,0 +1,9 @@
+-----------Pull Session Token and MTT by Lead ID-------------
+SELECT
+lead_id,
+lead_submission_at,
+session_token,
+multitrack_token,
+page_view_token
+FROM `shopify-dw.sales.sales_lead_submissions`
+LIMIT 1000
