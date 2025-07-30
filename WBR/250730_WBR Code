@@ -1,0 +1,260 @@
+--updated on 7/30/25 to include campaign_name in the base query--
+--deployed to WBR Dashboard on 7/30/25--
+
+WITH base AS (
+SELECT
+  week_starting_monday,
+  campaign_region,
+  spend_marketing_channel,
+  spend_marketing_subchannel,
+  segment,
+  case when spend_is_branded is true then "Branded" 
+      when spend_is_branded is false then "Non-Branded" else "Unknown" END as  spend_is_branded,
+  campaign_targeting_type,
+  campaign_name,
+  SAFE_CAST(SUM(Spend) AS FLOAT64) AS Spend,
+  SAFE_CAST(SUM(lead_volume) AS FLOAT64) AS Leads,
+  SAFE_CAST(SUM(DLV) AS FLOAT64) AS DLV,
+  SAFE_CAST(SUM(ileads) AS FLOAT64) AS iLeads,
+  SAFE_CAST(SUM(idlv) AS FLOAT64) AS iDLV,
+  0 as Payback
+FROM (
+  SELECT
+    DATE_TRUNC(DATE(dlv.date), WEEK(MONDAY)) AS week_starting_monday,
+    dlv.campaign_region,
+    dlv.spend_marketing_channel,
+    dlv.spend_marketing_subchannel,
+    dlv.campaign_targeting_type,
+    dlv.campaign_name,
+    segment_info.segment,
+    spend_is_branded,
+    0 AS Spend,
+    segment_info.lead_volume,
+    segment_info.dlv,
+    segment_info.ileads,
+    segment_info.idlv
+
+  FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback` dlv
+  CROSS JOIN UNNEST([
+    STRUCT(
+      'Enterprise' AS segment,
+      COALESCE(dlv.d2c_enterprise_leads, 0) + COALESCE(dlv.b2b_enterprise_leads, 0) AS lead_volume,
+      COALESCE(dlv.d2c_enterprise_adjusted_dlv_usd, 0) + COALESCE(dlv.b2b_enterprise_adjusted_dlv_usd, 0) AS dlv,
+      COALESCE(dlv.d2c_enterprise_ileads, 0) + COALESCE(dlv.b2b_enterprise_ileads, 0) AS ileads,
+      COALESCE(dlv.d2c_enterprise_iadjusted_dlv_usd, 0) + COALESCE(dlv.b2b_enterprise_iadjusted_dlv_usd, 0) AS idlv
+    ),
+    STRUCT(
+      'Large',
+      COALESCE(dlv.d2c_large_leads, 0) + COALESCE(dlv.b2b_large_leads, 0),
+      COALESCE(dlv.d2c_large_adjusted_dlv_usd, 0) + COALESCE(dlv.b2b_large_adjusted_dlv_usd, 0),
+      COALESCE(dlv.d2c_large_ileads, 0) + COALESCE(dlv.b2b_large_ileads, 0) ,
+      COALESCE(dlv.d2c_large_iadjusted_dlv_usd, 0) + COALESCE(dlv.b2b_large_iadjusted_dlv_usd, 0)
+    ),
+    STRUCT(
+      'Mid-Mkt',
+      COALESCE(dlv.d2c_mid_mkt_leads, 0) + COALESCE(dlv.b2b_mid_mkt_leads, 0),
+      COALESCE(dlv.d2c_mid_mkt_adjusted_dlv_usd, 0) + COALESCE(dlv.b2b_mid_mkt_adjusted_dlv_usd, 0),
+      COALESCE(dlv.d2c_mid_mkt_ileads, 0) + COALESCE(dlv.b2b_mid_mkt_ileads, 0) ,
+      COALESCE(dlv.d2c_mid_mkt_iadjusted_dlv_usd, 0) + COALESCE(dlv.b2b_mid_mkt_iadjusted_dlv_usd, 0)
+    ),
+    STRUCT(
+      'SMB',
+      COALESCE(dlv.d2c_smb_leads, 0) + COALESCE(dlv.b2b_smb_leads, 0),
+      COALESCE(dlv.d2c_smb_adjusted_dlv_usd, 0) + COALESCE(dlv.b2b_smb_adjusted_dlv_usd, 0),
+      COALESCE(dlv.d2c_smb_ileads, 0) + COALESCE(dlv.b2b_smb_ileads, 0) ,
+      COALESCE(dlv.d2c_smb_iadjusted_dlv_usd, 0) + COALESCE(dlv.b2b_smb_iadjusted_dlv_usd, 0)
+    ),
+    STRUCT(
+      'Self-Serve',
+      COALESCE(dlv.d2c_self_serve_leads, 0) + COALESCE(dlv.b2b_self_serve_leads, 0),
+      COALESCE(dlv.d2c_self_serve_adjusted_dlv_usd, 0) + COALESCE(dlv.b2b_self_serve_adjusted_dlv_usd, 0),
+      COALESCE(dlv.d2c_self_serve_ileads, 0) + COALESCE(dlv.b2b_self_serve_ileads, 0) ,
+      COALESCE(dlv.d2c_self_serve_iadjusted_dlv_usd, 0) + COALESCE(dlv.b2b_self_serve_iadjusted_dlv_usd, 0)
+    )
+  ]) AS segment_info
+  WHERE DATE(dlv.date) >= '2025-01-01'
+    AND dlv.campaign_region IN ('AMER','EMEA','APAC')
+    and spend_cost_center_sub_group='Plus'
+    AND segment_info.lead_volume > 0
+)
+GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+
+UNION ALL
+
+SELECT
+  DATE_TRUNC(DATE(dlv.date), WEEK(MONDAY)) AS week_starting_monday,
+  dlv.campaign_region,
+  dlv.spend_marketing_channel,
+  dlv.spend_marketing_subchannel,
+  'N/A',
+  case when spend_is_branded is true then "Branded" 
+      when spend_is_branded is false then "Non-Branded" else "Unknown" END as  spend_is_branded,
+  dlv.campaign_targeting_type,
+  dlv.campaign_name,
+  SUM(dlv.spend_usd) as Spend,
+  SUM(dlv.leads_attributed) as Leads,
+  SUM(dlv.adjusted_dollar_lead_value_usd) as DLV,
+  SUM(dlv.ileads_attributed) as iLeads,
+  SUM(dlv.iadjusted_dollar_lead_value_usd) as iDLV,
+  SUM(dlv.spend_usd) / NULLIF(SUM(dlv.iadjusted_dollar_lead_value_usd) / 36, 0) AS Payback
+FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback` dlv
+WHERE DATE(dlv.date) >= '2025-01-01'
+and spend_cost_center_sub_group='Plus'
+  AND dlv.campaign_region IN ('AMER','EMEA','APAC')
+GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+),
+mqls AS (
+  SELECT 
+    DATE_TRUNC(DATE(l.new_sales_ready_at), WEEK(MONDAY)) as week_starting_monday,
+    COALESCE(TRIM(IF(ARRAY_LENGTH(SPLIT(lv.spend_campaign_name,'|')) = 14, SPLIT(lv.spend_campaign_name,'|'), null)[SAFE_OFFSET(5)]),"Unknown Region") AS region,
+    lv.marketing_channel,
+    lv.marketing_subchannel,
+    lv.segment,
+    case when spend_is_branded is true then "Branded" 
+      when spend_is_branded is false then "Non-Branded" else "Unknown" END as  is_branded,
+    SUM(CASE WHEN DATE(l.new_sales_ready_at) IS NOT NULL THEN 1 ELSE 0 END) AS MQLs
+  FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_attribution` lv
+  JOIN `shopify-dw.sales.sales_leads` l ON lv.lead_id = l.lead_id
+  JOIN `shopify-dw.raw_salesforce_banff.lead` bl ON lv.lead_id = bl.id
+  WHERE lv.is_last_touchpoint = True 
+    AND l.lead_source_original_category="Marketing"
+    AND lv.product IN ('Plus', 'Commerce Components','B2B')
+    AND DATE(l.new_sales_ready_at) >= '2025-01-01'
+    AND NOT (
+  l.lead_source_original = 'Content Syndication'
+  OR (
+    l.lead_source_original = 'Content'
+    AND (
+      LOWER(bl.UTM_Source__c) LIKE '%madisonlogic%'
+      OR LOWER(bl.UTM_Source__c) LIKE '%techtarget%'
+      OR LOWER(bl.UTM_Source__c) LIKE '%integrate%'
+    )
+  )
+)
+  
+  GROUP BY all
+),
+combined as(
+  SELECT
+  b.week_starting_monday,
+  b.campaign_region,
+  b.spend_marketing_channel,
+  b.spend_marketing_subchannel,
+  b.segment,
+  b.spend_is_branded,
+  b.campaign_targeting_type,
+  b.campaign_name,
+  b.Spend,
+  b.Leads,
+  b.iLeads,
+  b.iDLV,
+  b.Payback,
+  b.DLV,
+  m.MQLs
+FROM base b
+LEFT JOIN mqls m
+ON
+  b.week_starting_monday = m.week_starting_monday
+  AND UPPER(TRIM(b.campaign_region)) = UPPER(TRIM(m.region))
+  AND UPPER(TRIM(b.spend_marketing_channel)) = UPPER(TRIM(m.marketing_channel))
+  AND UPPER(TRIM(b.spend_marketing_subchannel)) = UPPER(TRIM(m.marketing_subchannel))
+  AND UPPER(TRIM(b.segment)) = UPPER(TRIM(m.segment))
+  AND UPPER(TRIM(COALESCE(b.spend_is_branded, 'UNKNOWN'))) = UPPER(TRIM(COALESCE(m.is_branded, 'UNKNOWN')))
+ORDER BY
+  week_starting_monday DESC,
+  region,
+  marketing_channel,
+  marketing_subchannel,
+  segment,
+  spend_is_branded
+),
+all_levels AS (
+
+ 
+  SELECT
+    week_starting_monday,
+    campaign_region,
+    spend_marketing_channel,
+    spend_marketing_subchannel,
+    spend_is_branded,
+    segment,
+    campaign_targeting_type,
+    campaign_name,
+  
+    SUM(Spend) as Spend,
+    SUM(Leads) as Leads,
+    SUM(DLV) as DLV,
+    SUM(MQLs) as MQLs,
+    SUM(iLeads) as iLeads,
+    SUM(iDLV) as iDLV
+
+  FROM combined
+  where week_starting_monday  < DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY))
+  GROUP BY week_starting_monday, campaign_region, spend_marketing_channel, spend_marketing_subchannel, spend_is_branded, segment, campaign_targeting_type, campaign_name
+  
+)
+
+SELECT
+  al.*,
+  CASE
+    WHEN al.week_starting_monday = (
+      SELECT MAX(week_starting_monday) FROM all_levels
+    ) - INTERVAL 1 WEEK
+    THEN TRUE ELSE FALSE
+  END AS is_prev_week,
+   CASE
+    WHEN al.week_starting_monday = (
+      SELECT MAX(week_starting_monday) FROM all_levels) 
+    THEN TRUE ELSE FALSE
+  END AS is_curr_week,
+
+  CASE
+    WHEN al.week_starting_monday = (
+      SELECT MAX(week_starting_monday) FROM all_levels
+    ) - INTERVAL 1 WEEK
+    THEN TRUE ELSE FALSE
+  END AS is_t1w,
+
+  CASE
+    WHEN al.week_starting_monday = (
+      SELECT MAX(week_starting_monday) FROM all_levels
+    ) - INTERVAL 2 WEEK
+    THEN TRUE ELSE FALSE
+  END AS is_t2w,
+
+  CASE
+    WHEN al.week_starting_monday = (
+      SELECT MAX(week_starting_monday) FROM all_levels
+    ) - INTERVAL 3 WEEK
+    THEN TRUE ELSE FALSE
+  END AS is_t3w,
+
+  CASE
+    WHEN al.week_starting_monday = (
+      SELECT MAX(week_starting_monday) FROM all_levels
+    ) - INTERVAL 4 WEEK
+    THEN TRUE ELSE FALSE
+  END AS is_t4w,
+
+CASE
+  WHEN EXTRACT(YEAR FROM al.week_starting_monday) = (
+         SELECT EXTRACT(YEAR FROM MAX(week_starting_monday)) FROM all_levels
+       )
+   AND EXTRACT(QUARTER FROM al.week_starting_monday) = (
+         SELECT EXTRACT(QUARTER FROM MAX(week_starting_monday)) FROM all_levels
+       )
+  THEN TRUE
+  ELSE FALSE
+END AS is_current_QTD,
+
+CASE
+  WHEN EXTRACT(YEAR FROM al.week_starting_monday) = EXTRACT(YEAR FROM (SELECT MAX(week_starting_monday) FROM all_levels))
+  THEN TRUE ELSE FALSE
+END AS is_ytd,
+60 as Payback_Target,
+dg.idlv_goal
+
+FROM all_levels al
+LEFT JOIN `shopify-dw.scratch.idlv_goal` dg
+  ON al.week_starting_monday = dg.week_starting_monday
+  AND al.campaign_region = dg.region

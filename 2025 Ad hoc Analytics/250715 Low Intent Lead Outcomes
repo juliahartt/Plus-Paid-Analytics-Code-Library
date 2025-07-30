@@ -27,6 +27,6 @@ left join `shopify-dw.sales.sales_opportunities` opp
 where lv.lead_created_at >= '2024-01-01'
 and is_last_touchpoint IS TRUE
 and lv.lead_source IN ('Content','Webinar')
-and lv.spend_cost_center_sub_group = 'Plus'
+--and lv.spend_cost_center_sub_group = 'Plus'
 order by lv.last_touch_adjusted_dlv_usd desc
 
