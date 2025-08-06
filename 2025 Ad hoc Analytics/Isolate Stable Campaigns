@@ -1,0 +1,229 @@
+--Spend Stability Analysis for All Campaigns--
+--This script identifies truly stable campaigns based on spend volatility and adds CV analysis for all key metrics
+
+WITH daily_spend AS (
+  SELECT
+    campaign_id,
+    campaign_name,
+    campaign_lob,
+    campaign_targeting_type,
+    campaign_tactic,
+    campaign_action_objective,
+    campaign_creative_type,
+    spend_marketing_channel,
+    spend_marketing_subchannel,
+    campaign_region,
+    campaign_subregion,
+    spend_cost_center_sub_group,
+    campaign_spend_classification,
+    date,
+    spend_usd,
+    leads_attributed,
+    adjusted_dollar_lead_value_usd,
+    iadjusted_dollar_lead_value_usd,
+    ileads_attributed,
+    CASE 
+      WHEN (iadjusted_dollar_lead_value_usd)/36 = 0 OR (iadjusted_dollar_lead_value_usd)/36 IS NULL THEN NULL
+      ELSE (spend_usd) / ((iadjusted_dollar_lead_value_usd)/36)
+      END AS iPayback,
+    CASE 
+      WHEN (adjusted_dollar_lead_value_usd)/36 = 0 OR (adjusted_dollar_lead_value_usd)/36 IS NULL THEN NULL
+      ELSE (spend_usd) / ((adjusted_dollar_lead_value_usd)/36)
+      END AS Payback
+  FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback`
+  WHERE date >= '2025-04-01'
+    AND spend_usd IS NOT NULL
+    AND spend_usd > 0
+    AND spend_cost_center_sub_group = 'Plus'
+),
+
+spend_stability AS (
+  SELECT
+    campaign_id,
+    campaign_name,
+    campaign_lob,
+    campaign_targeting_type,
+    campaign_tactic,
+    campaign_action_objective,
+    campaign_creative_type,
+    spend_marketing_channel,
+    spend_marketing_subchannel,
+    campaign_region,
+    campaign_subregion,
+    spend_cost_center_sub_group,
+    campaign_spend_classification,
+    
+    -- Data points
+    COUNT(*) as days_with_spend,
+    MIN(date) as first_date,
+    MAX(date) as last_date,
+    
+    -- Spend statistics
+    AVG(spend_usd) as avg_daily_spend,
+    STDDEV(spend_usd) as stddev_daily_spend,
+    MIN(spend_usd) as min_daily_spend,
+    MAX(spend_usd) as max_daily_spend,
+    SUM(spend_usd) as total_spend,
+    
+    -- Spend stability metrics
+    CASE 
+      WHEN AVG(spend_usd) > 0 THEN STDDEV(spend_usd) / AVG(spend_usd)
+      ELSE NULL 
+    END as spend_cv,
+    
+    -- Spend range metrics
+    CASE 
+      WHEN AVG(spend_usd) > 0 THEN (MAX(spend_usd) - MIN(spend_usd)) / AVG(spend_usd)
+      ELSE NULL 
+    END as spend_range_ratio,
+    
+    -- Consistency metrics
+    CASE 
+      WHEN AVG(spend_usd) > 0 THEN MIN(spend_usd) / AVG(spend_usd)
+      ELSE NULL 
+    END as min_spend_ratio,
+    
+    CASE 
+      WHEN AVG(spend_usd) > 0 THEN MAX(spend_usd) / AVG(spend_usd)
+      ELSE NULL 
+    END as max_spend_ratio,
+    
+    -- Lead CV Calculations
+    AVG(leads_attributed) as avg_leads_attributed,
+    STDDEV(leads_attributed) as stddev_leads_attributed,
+    CASE 
+      WHEN AVG(leads_attributed) > 0 THEN STDDEV(leads_attributed) / AVG(leads_attributed)
+      ELSE NULL 
+    END as leads_cv,
+    
+    -- iLead CV Calculations
+    AVG(ileads_attributed) as avg_ileads_attributed,
+    STDDEV(ileads_attributed) as stddev_ileads_attributed,
+    CASE 
+      WHEN AVG(ileads_attributed) > 0 THEN STDDEV(ileads_attributed) / AVG(ileads_attributed)
+      ELSE NULL 
+    END as ileads_cv,
+    
+    -- DLV CV Calculations
+    AVG(adjusted_dollar_lead_value_usd) as avg_dlv,
+    STDDEV(adjusted_dollar_lead_value_usd) as stddev_dlv,
+    CASE 
+      WHEN AVG(adjusted_dollar_lead_value_usd) > 0 THEN STDDEV(adjusted_dollar_lead_value_usd) / AVG(adjusted_dollar_lead_value_usd)
+      ELSE NULL 
+    END as dlv_cv,
+    
+    -- iDLV CV Calculations
+    AVG(iadjusted_dollar_lead_value_usd) as avg_idlv,
+    STDDEV(iadjusted_dollar_lead_value_usd) as stddev_idlv,
+    CASE 
+      WHEN AVG(iadjusted_dollar_lead_value_usd) > 0 THEN STDDEV(iadjusted_dollar_lead_value_usd) / AVG(iadjusted_dollar_lead_value_usd)
+      ELSE NULL 
+    END as idlv_cv,
+    
+    -- Payback CV Calculations
+    AVG(Payback) as avg_payback,
+    STDDEV(Payback) as stddev_payback,
+    CASE 
+      WHEN AVG(Payback) > 0 THEN STDDEV(Payback) / AVG(Payback)
+      ELSE NULL 
+    END as payback_cv,
+    
+    -- iPayback CV Calculations
+    AVG(iPayback) as avg_ipayback,
+    STDDEV(iPayback) as stddev_ipayback,
+    CASE 
+      WHEN AVG(iPayback) > 0 THEN STDDEV(iPayback) / AVG(iPayback)
+      ELSE NULL 
+    END as ipayback_cv
+
+  FROM daily_spend
+  WHERE 
+    leads_attributed IS NOT NULL 
+    AND ileads_attributed IS NOT NULL
+    AND adjusted_dollar_lead_value_usd IS NOT NULL 
+    AND iadjusted_dollar_lead_value_usd IS NOT NULL 
+    AND Payback IS NOT NULL 
+    AND iPayback IS NOT NULL
+  GROUP BY 
+    campaign_id, campaign_name, campaign_lob, campaign_targeting_type, 
+    campaign_tactic, campaign_action_objective, campaign_creative_type,
+    spend_marketing_channel, spend_marketing_subchannel, campaign_region, 
+    campaign_subregion, spend_cost_center_sub_group, campaign_spend_classification
+  HAVING COUNT(*) >= 7  -- Only include campaigns with at least 7 days of data
+)
+
+SELECT
+  *,
+  
+  -- Spend stability categories
+  CASE 
+    WHEN spend_cv IS NULL THEN 'Insufficient Data'
+    WHEN spend_cv < 0.3 THEN 'Very Stable'
+    WHEN spend_cv < 0.5 THEN 'Stable'
+    WHEN spend_cv < 0.8 THEN 'Moderate'
+    WHEN spend_cv < 1.2 THEN 'Volatile'
+    ELSE 'Highly Volatile'
+  END as spend_stability_category,
+  
+  -- Lead CV Stability Categories
+  CASE 
+    WHEN leads_cv IS NULL THEN 'Insufficient Data'
+    WHEN leads_cv < 0.3 THEN 'Very Stable'
+    WHEN leads_cv < 0.5 THEN 'Stable'
+    WHEN leads_cv < 0.8 THEN 'Moderate'
+    WHEN leads_cv < 1.2 THEN 'Volatile'
+    ELSE 'Highly Volatile'
+  END as leads_stability_category,
+  
+  -- iLead CV Stability Categories
+  CASE 
+    WHEN ileads_cv IS NULL THEN 'Insufficient Data'
+    WHEN ileads_cv < 0.3 THEN 'Very Stable'
+    WHEN ileads_cv < 0.5 THEN 'Stable'
+    WHEN ileads_cv < 0.8 THEN 'Moderate'
+    WHEN ileads_cv < 1.2 THEN 'Volatile'
+    ELSE 'Highly Volatile'
+  END as ileads_stability_category,
+  
+  -- DLV CV Stability Categories
+  CASE 
+    WHEN dlv_cv IS NULL THEN 'Insufficient Data'
+    WHEN dlv_cv < 0.3 THEN 'Very Stable'
+    WHEN dlv_cv < 0.5 THEN 'Stable'
+    WHEN dlv_cv < 0.8 THEN 'Moderate'
+    WHEN dlv_cv < 1.2 THEN 'Volatile'
+    ELSE 'Highly Volatile'
+  END as dlv_stability_category,
+  
+  -- iDLV CV Stability Categories
+  CASE 
+    WHEN idlv_cv IS NULL THEN 'Insufficient Data'
+    WHEN idlv_cv < 0.3 THEN 'Very Stable'
+    WHEN idlv_cv < 0.5 THEN 'Stable'
+    WHEN idlv_cv < 0.8 THEN 'Moderate'
+    WHEN idlv_cv < 1.2 THEN 'Volatile'
+    ELSE 'Highly Volatile'
+  END as idlv_stability_category,
+  
+  -- Payback CV Stability Categories
+  CASE 
+    WHEN payback_cv IS NULL THEN 'Insufficient Data'
+    WHEN payback_cv < 0.3 THEN 'Very Stable'
+    WHEN payback_cv < 0.5 THEN 'Stable'
+    WHEN payback_cv < 0.8 THEN 'Moderate'
+    WHEN payback_cv < 1.2 THEN 'Volatile'
+    ELSE 'Highly Volatile'
+  END as payback_stability_category,
+  
+  -- iPayback CV Stability Categories
+  CASE 
+    WHEN ipayback_cv IS NULL THEN 'Insufficient Data'
+    WHEN ipayback_cv < 0.3 THEN 'Very Stable'
+    WHEN ipayback_cv < 0.5 THEN 'Stable'
+    WHEN ipayback_cv < 0.8 THEN 'Moderate'
+    WHEN ipayback_cv < 1.2 THEN 'Volatile'
+    ELSE 'Highly Volatile'
+  END as ipayback_stability_category
+
+FROM spend_stability
+ORDER BY spend_cv ASC  -- Order by most stable spend first

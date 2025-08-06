@@ -1,0 +1,67 @@
+--Stable Campaigns Daily Data for Looker Studio--
+--This script provides daily data for 100 stable campaigns from LinkedIn, Meta, Google, and Bing
+--Date range: Q2 2025 to date (April 1, 2025 onwards)
+
+SELECT
+  date,
+  campaign_name,
+  campaign_id,
+  campaign_lob,
+  campaign_targeting_type,
+  campaign_tactic,
+  campaign_action_objective,
+  campaign_creative_type,
+  spend_marketing_channel,
+  spend_marketing_subchannel,
+  campaign_region,
+  campaign_subregion,
+  spend_cost_center_sub_group,
+  campaign_spend_classification,
+  spend_usd,
+  leads_attributed,
+  adjusted_dollar_lead_value_usd,
+  iadjusted_dollar_lead_value_usd,
+  ileads_attributed,
+  CASE 
+    WHEN (iadjusted_dollar_lead_value_usd)/36 = 0 OR (iadjusted_dollar_lead_value_usd)/36 IS NULL THEN NULL
+    ELSE (spend_usd) / ((iadjusted_dollar_lead_value_usd)/36)
+  END AS iPayback,
+  CASE 
+    WHEN (adjusted_dollar_lead_value_usd)/36 = 0 OR (adjusted_dollar_lead_value_usd)/36 IS NULL THEN NULL
+    ELSE (spend_usd) / ((adjusted_dollar_lead_value_usd)/36)
+  END AS Payback
+FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback`
+WHERE
+  date >= '2025-04-01'
+  AND campaign_id IN (
+    -- LinkedIn Campaigns (57 campaigns)
+    '312883164', '320618616', '323324336', '337291226', '344363984',
+    '347266244', '347661744', '351827724', '353841786', '354804594',
+    '355286703', '360616846', '365959246', '365975826', '366482464',
+    '366492444', '366863204', '367835443', '368003186', '368020966',
+    '370759886', '370769186', '373122066', '374253846', '374735336',
+    '376404884', '376443164', '382386134', '382613094', '382907194',
+    '382914274', '382923944', '382944134', '385412994', '388009476',
+    '388048106', '388879656', '389407184', '389462264', '392023656',
+    '392032436', '395718056', '395756856', '399493226', '400400703',
+    '401703164', '402072976', '408679856', '408898216', '410675656',
+    '410685246', '410889006', '410897236', '410898306', '417271346',
+    '417289446', '417423666',
+    
+    -- Google Campaigns (22 campaigns)
+    '9496119771', '9496119798', '9593079084', '9593079291', '9593079297',
+    '9593079336', '11086688358', '12876013418', '16875585114', '17682398587',
+    '17691610547', '19887025800', '19887025821', '20851292830', '20863439030',
+    '21311359373', '21404380026', '22053708447', '22053708453', '22642279398',
+    '22653153810', '22770399316',
+    
+    -- Bing Campaigns (2 campaigns)
+    '392155971', '429498197',
+    
+    -- Meta Campaigns (19 campaigns)
+    '6663805678067', '6670959369467', '6709483003867', '6709969299867', '6722290732867',
+    '6722318778067', '6722324288267', '6722326695267', '6740290467267', '6740886705667',
+    '6787705450667', '6817410599667', '6817972468667', '6827219666067', '6830405761667',
+    '6830758732467', '6832301719467', '6845727013467', '6851943985867'
+  )
+ORDER BY date DESC, campaign_id 

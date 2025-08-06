@@ -1,5 +1,8 @@
+-- Weekly Version --
+
 SELECT
-date,
+DATE_TRUNC(date, WEEK) as week_start_date,
+--date,
 campaign_name,
 campaign_id,
 campaign_lob,
@@ -17,7 +20,9 @@ spend_usd,
 leads_attributed,
 adjusted_dollar_lead_value_usd,
 iadjusted_dollar_lead_value_usd,
-ileads_attributed
+ileads_attributed,
+SAFE_DIVIDE(SUM(spend_usd),(SUM(adjusted_dollar_lead_value_usd) / 36)) AS payback,
+SAFE_DIVIDE(SUM(spend_usd), (SUM(iadjusted_dollar_lead_value_usd) / 36)) AS iPayback
 FROM `shopify-dw.mart_commercial_optimization.dollar_lead_value_payback`
 WHERE
 date>= '2025-01-01'
@@ -58,4 +63,6 @@ AND campaign_id IN (
 '6670641227867', '363757086', '363804606', '363984096', '363757146',
 '363806166', '363929336', '363748316', '363795646', '363984186',
 '6673782374667')
+group by all
+order by week_start_date desc
 
