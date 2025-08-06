@@ -1,0 +1,98 @@
+# CROSS-CORRELATION ANALYSIS CODE
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import pearsonr
+
+def calculate_cross_correlation(spend_series, leads_series, max_lag=30):
+    """
+    Calculate cross-correlation between spend and leads for a single campaign
+    
+    Returns:
+    - lags: list of lag values (-30 to +30 days)
+    - correlations: list of correlation coefficients at each lag
+    """
+    # Remove NaN values
+    valid_mask = ~(np.isnan(spend_series) | np.isnan(leads_series))
+    spend_clean = spend_series[valid_mask]
+    leads_clean = leads_series[valid_mask]
+    
+    if len(spend_clean) < 10:  # Need minimum data points
+        return None
+    
+    # Calculate cross-correlation
+    correlations = []
+    lags = range(-max_lag, max_lag + 1)  # -30 to +30 days
+    
+    for lag in lags:
+        if lag < 0:
+            # Negative lag: leads leads spend (reverse causality)
+            # Example: lag = -5 means leads 5 days ago vs spend today
+            x = leads_clean[:lag] if lag != 0 else leads_clean
+            y = spend_clean[-lag:] if lag != 0 else spend_clean
+        else:
+            # Positive lag: spend leads leads (what we want to measure)
+            # Example: lag = +5 means spend today vs leads 5 days later
+            x = spend_clean[:-lag] if lag != 0 else spend_clean
+            y = leads_clean[lag:] if lag != 0 else leads_clean
+        
+        if len(x) > 5 and len(y) > 5:  # Minimum overlap required
+            corr, _ = pearsonr(x, y)
+            correlations.append(corr)
+        else:
+            correlations.append(np.nan)
+    
+    return lags, correlations
+
+# MAIN ANALYSIS LOOP
+subchannels = ['META', 'GOOGLE', 'LINKEDIN', 'BING']
+subchannel_correlations = {}
+
+for subchannel in subchannels:
+    subchannel_data = df[df['spend_marketing_subchannel'] == subchannel]
+    
+    # Aggregate by date to get daily totals
+    daily_data = subchannel_data.groupby('date').agg({
+        'spend_usd': 'sum',
+        'leads_attributed': 'sum'
+    }).reset_index()
+    
+    # Sort by date (critical for time series)
+    daily_data = daily_data.sort_values('date')
+    
+    # Calculate cross-correlation
+    result = calculate_cross_correlation(
+        daily_data['spend_usd'].values,
+        daily_data['leads_attributed'].values,
+        max_lag=30
+    )
+    
+    if result is not None:
+        lags, correlations = result
+        subchannel_correlations[subchannel] = {
+            'lags': lags,
+            'correlations': correlations,
+            'data_points': len(daily_data)
+        }
+
+# FIND BEST LAGS
+for subchannel, lag_info in subchannel_correlations.items():
+    lags = lag_info['lags']
+    correlations = lag_info['correlations']
+    
+    # Find best positive lag (spend → leads)
+    positive_lags = [(lag, corr) for lag, corr in zip(lags, correlations) 
+                     if lag > 0 and not np.isnan(corr)]
+    
+    # Find best negative lag (leads → spend, reverse causality)
+    negative_lags = [(lag, corr) for lag, corr in zip(lags, correlations) 
+                     if lag < 0 and not np.isnan(corr)]
+    
+    if positive_lags:
+        best_positive_lag, best_positive_corr = max(positive_lags, key=lambda x: x[1])
+        print(f"{subchannel}: Best positive lag = {best_positive_lag} days (r={best_positive_corr:.3f})")
+    
+    if negative_lags:
+        best_negative_lag, best_negative_corr = max(negative_lags, key=lambda x: x[1])
+        print(f"{subchannel}: Best negative lag = {best_negative_lag} days (r={best_negative_corr:.3f})")
