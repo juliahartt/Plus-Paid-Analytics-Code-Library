@@ -14,8 +14,8 @@ WITH base AS (
         LOWER(UTM_Source__c) LIKE '%madisonlogic%' OR
         LOWER(UTM_Source__c) LIKE '%techtarget%' OR
         LOWER(UTM_Source__c) LIKE '%integrate%') THEN 'content syndication'
-      WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) LIKE '%paid%' AND marketing_subchannel = 'content syndication' THEN 'content syndication'
-      WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) LIKE '%paid%' AND marketing_subchannel <> 'content syndication' THEN 'paid'
+      WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) LIKE '%paid%' AND spend_marketing_subchannel = 'content syndication' THEN 'content syndication'
+      WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) LIKE '%paid%' AND spend_marketing_subchannel <> 'content syndication' THEN 'paid'
       WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) NOT LIKE '%paid%' THEN 'non-paid'
       ELSE 'null' END AS channel,
     DATE_TRUNC(lv.lead_created_at, quarter) AS quarter,
@@ -39,8 +39,8 @@ WITH base AS (
           LOWER(UTM_Source__c) LIKE '%madisonlogic%' OR
           LOWER(UTM_Source__c) LIKE '%techtarget%' OR
           LOWER(UTM_Source__c) LIKE '%integrate%') THEN 'content syndication'
-        WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) LIKE '%paid%' AND marketing_subchannel = 'content syndication' THEN 'content syndication'
-        WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) LIKE '%paid%' AND marketing_subchannel <> 'content syndication' THEN 'paid'
+        WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) LIKE '%paid%' AND spend_marketing_subchannel = 'content syndication' THEN 'content syndication'
+        WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) LIKE '%paid%' AND spend_marketing_subchannel <> 'content syndication' THEN 'paid'
         WHEN lead_source_original_category = 'Marketing' AND LOWER(commercial_channel) NOT LIKE '%paid%' THEN 'non-paid'
         ELSE NULL END
     ) IS NOT NULL
